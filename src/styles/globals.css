@@ -1428,7 +1428,8 @@ table tr:hover {
   overflow-x:hidden;
   flex:1;
   min-height:0;
-  padding-right:2px;
+  padding-top: 10px;
+  padding-right: 10px
   align-content:start;
 }
 
