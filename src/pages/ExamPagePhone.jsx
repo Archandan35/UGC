@@ -1,15 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import useExamEngine from "../hooks/useExamEngine";
 
-/**
- * ExamPagePhone — exact same classes & structure as old ExamPagePhone.jsx.
- * Uses new useExamEngine hook (no firebase / no old functions).
- * saveProgress not in new hook — Save & Leave just navigates away.
- */
 export default function ExamPagePhone() {
   const [sidebarOpen,      setSidebarOpen]      = useState(false);
   const [showLeaveDialog,  setShowLeaveDialog]  = useState(false);
   const [showCheatDialog,  setShowCheatDialog]  = useState(false);
+  const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const [cheatDialogCount, setCheatDialogCount] = useState(0);
 
   const {
@@ -35,7 +31,6 @@ export default function ExamPagePhone() {
     cheatCount,
     formatTime,
     setVisited,
-    // Save+leave from hook (Issue 3)
     handleSaveAndLeave: hookSaveAndLeave,
   } = useExamEngine();
 
@@ -59,11 +54,20 @@ export default function ExamPagePhone() {
     }
   }, [cheatCount]);
 
-  // Save state + navigate to dashboard (delegates to hook's handleSaveAndLeave)
   const handleLeaveExam     = useCallback(() => { hookSaveAndLeave(); }, [hookSaveAndLeave]);
   const handleSaveAndLeave  = useCallback(() => { hookSaveAndLeave(); }, [hookSaveAndLeave]);
   const handleContinueExam  = useCallback(() => setShowLeaveDialog(false), []);
   const handleCheatOk       = useCallback(() => setShowCheatDialog(false), []);
+
+  const handleSubmitRequest = useCallback(() => {
+    setSidebarOpen(false);
+    setShowSubmitDialog(true);
+  }, []);
+
+  const handleSubmitConfirm = useCallback(() => {
+    setShowSubmitDialog(false);
+    submitExam(false);
+  }, [submitExam]);
 
   /* ── Loading ── */
   if (loading) {
@@ -107,6 +111,7 @@ export default function ExamPagePhone() {
   const markedCount      = Object.keys(review).filter((id) => review[id]).length;
   const notAnsweredCount = questions.filter((q) => visited[q.id] && answers[q.id] === undefined).length;
   const notVisitedCount  = questions.filter((q) => !visited[q.id]).length;
+  const unattemptedCount = questions.length - answeredCount;
 
   /* Timer colour */
   const timerWarning = timeLeft < 300;
@@ -137,6 +142,37 @@ export default function ExamPagePhone() {
               </button>
               <button className="ph-dialog-btn ph-dialog-btn-save" onClick={handleSaveAndLeave}>
                 💾 Save &amp; Leave
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── SUBMIT CONFIRMATION DIALOG ── */}
+      {showSubmitDialog && (
+        <div className="exam-submit-modal-overlay">
+          <div className="exam-submit-modal">
+            <div className="exam-submit-modal-icon">📋</div>
+            <h3 className="exam-submit-modal-title">Submit Exam?</h3>
+            <p className="exam-submit-modal-sub">
+              You have answered <strong>{answeredCount}</strong> of{" "}
+              <strong>{questions.length}</strong> questions.
+              {unattemptedCount > 0 && (
+                <> <span className="exam-submit-unattempted">{unattemptedCount} unattempted.</span></>
+              )}
+            </p>
+            <div className="exam-submit-modal-actions">
+              <button
+                className="exam-submit-modal-btn exam-submit-modal-btn-confirm"
+                onClick={handleSubmitConfirm}
+              >
+                ✅ Yes, Submit
+              </button>
+              <button
+                className="exam-submit-modal-btn exam-submit-modal-btn-cancel"
+                onClick={() => setShowSubmitDialog(false)}
+              >
+                ← Continue Exam
               </button>
             </div>
           </div>
@@ -283,7 +319,7 @@ export default function ExamPagePhone() {
           </button>
           <button
             className="ph-nav-btn ph-btn-submit-footer"
-            onClick={() => submitExam(false)}
+            onClick={handleSubmitRequest}
           >
             Submit
           </button>
@@ -411,10 +447,7 @@ export default function ExamPagePhone() {
 
           <button
             className="ph-footer-btn submit"
-            onClick={() => {
-              setSidebarOpen(false);
-              submitExam(false);
-            }}
+            onClick={handleSubmitRequest}
           >
             ✅ Submit Test
           </button>
