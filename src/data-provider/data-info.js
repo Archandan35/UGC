@@ -1849,6 +1849,28 @@ const _studyPlansProvider = {
 /* ═══════════════════════════════════════════════════════════════
    REVISION
 ═══════════════════════════════════════════════════════════════ */
+
+/**
+ * Returns the numeric correct-answer index for a question row.
+ * Handles both numeric indices and letter strings ("A","B","C","D").
+ * Used exclusively by _revisionProvider to classify wrong answers.
+ */
+const _ANSWER_MAP = { A: 0, B: 1, C: 2, D: 3 };
+function _correctIndexOf(q) {
+  if (typeof q.correctAnswer === "number") return q.correctAnswer;
+  if (typeof q.correctAnswer === "string") {
+    return _ANSWER_MAP[q.correctAnswer.trim().toUpperCase()] ?? 0;
+  }
+  if (typeof q.correct_answer === "number") return q.correct_answer;
+  if (typeof q.correct_answer === "string") {
+    return _ANSWER_MAP[q.correct_answer.trim().toUpperCase()] ?? 0;
+  }
+  if (typeof q.answer === "string") {
+    return _ANSWER_MAP[q.answer.trim().toUpperCase()] ?? 0;
+  }
+  return 0;
+}
+
 const _revisionProvider = {
   getRevisionPool: async (uid, { maxResults = 50, maxQuestions = 200 } = {}) => {
     if (!uid) return { questions: [], stats: { totalWrong: 0, attempts: 0 } };
