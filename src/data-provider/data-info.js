@@ -1201,13 +1201,16 @@ const _resultsProvider = {
 
   saveResult: async (result, uid) => {
     const resolvedUid = uid || _cachedUid || null;
+    const now = new Date().toISOString();
 
-    // Try with legacy column names first (matches actual DB schema from screenshot)
-    const legacyPayload = {
+    // Minimal payload — only columns confirmed in legacy schema (from DB screenshot).
+    // Deliberately omits: mode, paper_id, language, pyq_year, question_ids, time_per_question
+    // to avoid "column not found in schema cache" errors on old DBs.
+    const payload = {
       userid:         resolvedUid || "anonymous",
       examid:         result.examId || null,
-      examname:       result.examName || result.examData?.name || null,
-      examtype:       result.mode || result.examType || "mock",
+      examname:       result.examName || null,
+      examtype:       result.examType || result.mode || "mock",
       score:          result.score ?? 0,
       totalmarks:     result.totalMarks ?? 0,
       totalquestions: result.questions?.length ?? result.totalQuestions ?? 0,
@@ -1220,36 +1223,33 @@ const _resultsProvider = {
         ? Object.values(result.timePerQuestion).reduce((a, b) => a + b, 0)
         : 0,
       cheatcount:     result.cheatCount ?? 0,
-      submittedat:    result.submittedAt || new Date().toISOString(),
-      createdat:      new Date().toISOString(),
+      submittedat:    result.submittedAt || now,
+      createdat:      now,
     };
 
-    // Attempt legacy insert
-    const legacyRes = await _supabase.from("results").insert(legacyPayload).select("id").single();
-    if (!legacyRes.error) return legacyRes.data.id;
+    const res = await _supabase.from("results").insert(payload).select("id").single();
+    if (!res.error) return res.data.id;
 
-    // If legacy columns don't exist, try new snake_case schema
-    console.warn("[saveResult] legacy columns failed, trying snake_case:", legacyRes.error.message);
-    const newPayload = {
-      user_id:          resolvedUid || "anonymous",
-      exam_id:          result.examId || null,
-      mode:             result.mode || "mock",
-      score:            result.score ?? 0,
-      total_marks:      result.totalMarks ?? 0,
-      correct:          result.correct ?? 0,
-      wrong:            result.wrong ?? 0,
-      unattempted:      result.unattempted ?? 0,
-      accuracy:         result.accuracy ?? 0,
-      answers:          result.answers || {},
-      question_ids:     (result.questions || []).map(q => q.id),
-      submitted_at:     result.submittedAt || new Date().toISOString(),
-      created_at:       new Date().toISOString(),
+    // Log the real error but don't throw — navigation must still happen
+    console.error("[saveResult] insert failed:", res.error.message, "| payload keys:", Object.keys(payload).join(", "));
+
+    // Retry with absolute minimum — just score + uid so result page still gets an ID
+    const minPayload = {
+      userid:      resolvedUid || "anonymous",
+      examid:      result.examId || null,
+      score:       result.score ?? 0,
+      correct:     result.correct ?? 0,
+      wrong:       result.wrong ?? 0,
+      unanswered:  result.unattempted ?? 0,
+      submittedat: now,
+      createdat:   now,
     };
-    const { data: row } = _check(
-      await _supabase.from("results").insert(newPayload).select("id").single(),
-      "saveResult"
-    );
-    return row.id;
+    const res2 = await _supabase.from("results").insert(minPayload).select("id").single();
+    if (!res2.error) return res2.data.id;
+
+    // If DB is completely broken, return a client-side ID so navigation still works
+    console.error("[saveResult] min insert also failed:", res2.error.message);
+    return `local_${Date.now()}`;
   },
 
   subscribeResults: (cb) => {
