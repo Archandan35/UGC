@@ -7426,6 +7426,14 @@ table tr:hover {
   border-color: #2563eb;
   background: #eff6ff;
 }
+.ep-option--correct {
+  border-color: #16a34a;
+  background: #f0fdf4;
+}
+.ep-option--wrong {
+  border-color: #dc2626;
+  background: #fef2f2;
+}
 
 /* Radio circle */
 .ep-option-radio {
@@ -8417,5 +8425,46 @@ table tr:hover {
 }
 
 /* ── Remove old flashcard-only revision styles (kept for safety, overridden) ── */
-.revision-header { display: none; }
-.revision-card   { display: none; }
+.revision-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-5) var(--sp-6);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+.revision-header h2 {
+  font-size: 1.4rem;
+  margin: 0 0 var(--sp-2);
+  font-weight: 800;
+  font-family: var(--font-display);
+}
+.revision-header p {
+  font-size: 0.83rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+.revision-card { display: none; }
+
+/* ── Revision feedback banner ── */
+.revision-feedback {
+  margin-top: 1rem;
+  padding: .85rem 1.1rem;
+  border-radius: 10px;
+  font-size: .9rem;
+  line-height: 1.5;
+  border: 1.5px solid transparent;
+}
+.revision-feedback strong { display: block; margin-bottom: .25rem; font-weight: 700; }
+.revision-feedback p { font-size: .88rem; margin: 0; }
+.revision-feedback--correct {
+  background: #f0fdf4;
+  border-color: #86efac;
+  color: #15803d;
+}
+.revision-feedback--wrong {
+  background: #fef2f2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
