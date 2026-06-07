@@ -285,25 +285,33 @@ export default function useExamEngine() {
     try {
       // Always use async uid resolution — sync getCurrentUid() may be null on page load
       const uid = getCurrentUid() || await provider.getCurrentUidAsync();
-      const savedId = await saveResult(resultData);
+
+      // Save result — errors are caught inside saveResult and return a local ID,
+      // so this should never throw. But wrap anyway for safety.
+      let savedId = null;
+      try {
+        savedId = await saveResult(resultData);
+      } catch (saveErr) {
+        console.error("saveResult threw (non-fatal):", saveErr);
+      }
       if (savedId) resultData.id = savedId;
 
       if (uid) {
-        await syncBookmarks(uid, bookmarks, questions).catch(e => console.warn("syncBookmarks:", e));
-        await recordAttempt({ uid, scorePct, questionCount: questions.length }).catch(e => console.warn("recordAttempt:", e));
+        // Non-fatal side effects — never block navigation
+        syncBookmarks(uid, bookmarks, questions).catch(e => console.warn("syncBookmarks:", e));
+        recordAttempt({ uid, scorePct, questionCount: questions.length }).catch(e => console.warn("recordAttempt:", e));
       }
 
-      // Clear saved attempt — exam is done, no resume needed
+      // Clear saved attempt — exam is done
       clearAttemptState(ATTEMPT_KEY);
 
       if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
 
-      // Navigate to Result Page with all result data
+      // ALWAYS navigate — even if DB save failed, student sees their result
       navigate("/result", { state: resultData });
     } catch (err) {
       console.error("submitExam failed:", err);
       setSubmitError(err.message || "Submission failed. Please try again.");
-      // Allow retry on error
       submittedRef.current = false;
       setSubmitting(false);
     }
