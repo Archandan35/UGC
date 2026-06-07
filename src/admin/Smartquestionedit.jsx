@@ -28,8 +28,6 @@ function QuestionEditor({
 
   useEffect(() => {
     if (!editorRef.current) return;
-    // Only reset DOM when value changed externally (question switch),
-    // not when user is typing (would reset cursor to position 0).
     if (value !== lastPushedRef.current) {
       lastPushedRef.current = value;
       editorRef.current.innerHTML = value || "";
@@ -191,59 +189,31 @@ export default function SmartEditPage() {
     isEditingQuestion || isNew;
 
   /* =========================================================
-     FIREBASE
+     DATA SUBSCRIPTIONS — provider returns plain arrays
   ========================================================= */
 
   useEffect(() => {
-    return subscribeSubjects(
-      (snap) => {
-        setSubjects(
-          snap.docs.map((d) => ({
-            id: d.id,
-            ...d.data(),
-          }))
-        );
-      }
-    );
+    return subscribeSubjects((data) => {
+      setSubjects(Array.isArray(data) ? data : []);
+    });
   }, []);
 
   useEffect(() => {
-    return subscribeTopics(
-      (snap) => {
-        setTopics(
-          snap.docs.map((d) => ({
-            id: d.id,
-            ...d.data(),
-          }))
-        );
-      }
-    );
+    return subscribeTopics((data) => {
+      setTopics(Array.isArray(data) ? data : []);
+    });
   }, []);
 
   useEffect(() => {
-    return subscribeSubtopics(
-      (snap) => {
-        setSubTopics(
-          snap.docs.map((d) => ({
-            id: d.id,
-            ...d.data(),
-          }))
-        );
-      }
-    );
+    return subscribeSubtopics((data) => {
+      setSubTopics(Array.isArray(data) ? data : []);
+    });
   }, []);
 
   useEffect(() => {
-    return subscribeQuestions(
-      (snap) => {
-        setQuestions(
-          snap.docs.map((d) => ({
-            id: d.id,
-            ...d.data(),
-          }))
-        );
-      }
-    );
+    return subscribeQuestions((data) => {
+      setQuestions(Array.isArray(data) ? data : []);
+    });
   }, []);
 
   /* =========================================================
@@ -301,10 +271,9 @@ export default function SmartEditPage() {
   }, [filteredQuestions, currentIndex, isNew]);
 
   /* =========================================================
-     HTML ↔ VISUAL SYNC
+     HTML <-> VISUAL SYNC
   ========================================================= */
 
-  // Build the canonical HTML string from current visual state
   function buildHtmlFromState({
     qHtml = questionHtml,
     a = optionA, b = optionB, c = optionC, d = optionD,
@@ -336,7 +305,6 @@ ${expl}
 </html>`;
   }
 
-  // Parse HTML string back into visual state fields
   function applyHtmlToVisual(html) {
     setHtmlCode(html);
 
@@ -345,11 +313,9 @@ ${expl}
 
     const get = (sel) => parsed.querySelector(sel);
 
-    // Question
     const qNode = get('[data-field="question"]');
     if (qNode) setQuestionHtml(qNode.innerHTML.trim());
 
-    // Options — try data-field first, fall back to <p> order
     const oA = get('[data-field="optionA"]');
     const oB = get('[data-field="optionB"]');
     const oC = get('[data-field="optionC"]');
@@ -368,11 +334,9 @@ ${expl}
     if (oD) setOptionD(oD.innerHTML);
     else if (paras[3]) setOptionD(paras[3].innerHTML);
 
-    // Explanation
     const exNode = get('[data-field="explanation"]') || get('.explanation');
     if (exNode) setExplanation(exNode.innerHTML.trim());
 
-    // Correct answer + difficulty
     const meta = get('[data-correct]') || get('[data-difficulty]');
     if (meta) {
       const ans = meta.getAttribute("data-correct");
@@ -570,6 +534,10 @@ ${expl}
     e.target.value = "";
   }
 
+  /* =========================================================
+     FILTERED DROPDOWNS
+  ========================================================= */
+
   const filteredTopics = topics.filter(
     (t) =>
       !selectedSubject ||
@@ -750,7 +718,7 @@ ${expl}
 
             <div className="se-review-question-card">
 
-              {/* TOP BAR — single unified row */}
+              {/* TOP BAR */}
 
               <div className="se-edit-toolbar-wrapper">
 
@@ -797,11 +765,10 @@ ${expl}
                   </button>
                 </div>
 
-                {/* FORMATTING + INSERT TOOLBAR — always visible in edit mode */}
+                {/* FORMATTING + INSERT TOOLBAR */}
                 {isEditable && (
                   <div className="se-editor-toolbar">
 
-                    {/* Format buttons */}
                     {[
                       ["bold", "B"],
                       ["italic", "I"],
@@ -822,10 +789,8 @@ ${expl}
                       </button>
                     ))}
 
-                    {/* Divider */}
                     <span className="se-toolbar-divider" />
 
-                    {/* Link insert */}
                     <button
                       type="button"
                       className="se-toolbar-btn"
@@ -835,7 +800,6 @@ ${expl}
                       🔗 Link
                     </button>
 
-                    {/* Table insert */}
                     <button
                       type="button"
                       className="se-toolbar-btn"
@@ -845,7 +809,6 @@ ${expl}
                       ⊞ Table
                     </button>
 
-                    {/* Image upload */}
                     <button
                       type="button"
                       className="se-toolbar-btn"
@@ -870,10 +833,8 @@ ${expl}
               {/* SCROLLABLE CONTENT AREA */}
               <div className="se-content-scroll">
 
-              {/* View-mode wrapper: badge appears on hover over ANY field */}
               <div className={!isEditable ? "se-view-content-group" : ""}>
 
-                {/* Shared hover badge — only in view mode */}
                 {!isEditable && (
                   <div className="se-view-only-badge" title="View Only — click Edit to make changes">
                     <svg viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -954,9 +915,9 @@ ${expl}
                 />
               </div>
 
-              </div>{/* end se-view-content-group */}
+              </div>
 
-              </div>{/* end se-content-scroll */}
+              </div>
 
             </div>
           </div>
@@ -1085,7 +1046,6 @@ ${expl}
                     type="button"
                     className="se-toolbar-btn"
                     onClick={() => {
-                      // Discard HTML changes — rebuild from current visual state
                       setHtmlCode(buildHtmlFromState());
                       setShowHtmlModal(false);
                     }}
