@@ -8468,3 +8468,13 @@ table tr:hover {
   border-color: #fca5a5;
   color: #b91c1c;
 }
+
+/* ── Revision Page — question image ── */
+.revision-question-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+  margin: 0 0 var(--sp-4);
+  border: 1px solid var(--border);
+}
