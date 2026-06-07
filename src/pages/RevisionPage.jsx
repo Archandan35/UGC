@@ -1,271 +1,222 @@
-import React, { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../hooks/useAuth";
-import { getRevisionPool } from "../lib/revision";
-import TopNav from "../components/TopNav";
+import TopNavbar from "../components/TopNavbar";
+import { useAuth } from "../context/AuthContext";
+import { getRevisionPool } from "../data-layer";
 
-// ─── helpers ────────────────────────────────────────────────────────────────
+const ANSWER_MAP = { A: 0, B: 1, C: 2, D: 3 };
 
-const ANSWER_INDEX = { A: 0, B: 1, C: 2, D: 3 };
-
-function correctIndex(q) {
-  if (typeof q?.correctAnswer === "number") return q.correctAnswer;
-  if (typeof q?.correct_answer === "number") return q.correct_answer;
-  const raw = q?.correctAnswer ?? q?.correct_answer ?? q?.answer;
-  if (typeof raw === "string") {
-    const key = raw.trim().toUpperCase();
-    if (key in ANSWER_INDEX) return ANSWER_INDEX[key];
-    const asNum = Number(key);
-    if (Number.isFinite(asNum)) return asNum;
+function correctIndexOf(q) {
+  if (typeof q.correctAnswer === "number") return q.correctAnswer;
+  if (typeof q.correctAnswer === "string") {
+    return ANSWER_MAP[q.correctAnswer.trim().toUpperCase()] ?? 0;
+  }
+  if (typeof q.answer === "string") {
+    return ANSWER_MAP[q.answer.trim().toUpperCase()] ?? 0;
   }
   return 0;
 }
 
-function optionClassName(question, index, selected, revealed) {
-  if (!revealed) return `ep-option${selected === index ? " ep-option--selected" : ""}`;
-  const correct = correctIndex(question);
-  if (index === correct) return "ep-option ep-option--correct";
-  if (selected === index && index !== correct) return "ep-option ep-option--wrong";
-  return "ep-option";
-}
-
-// ─── component ───────────────────────────────────────────────────────────────
-
 export default function RevisionPage() {
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
-
-  const [data, setData] = useState({ questions: [], stats: null });
-  const [isLoading, setIsLoading] = useState(true);
+  const [pool, setPool] = useState({ questions: [], stats: null });
+  const [loading, setLoading] = useState(true);
   const [current, setCurrent] = useState(0);
-  const [answers, setAnswers] = useState({});
-  const [revealed, setRevealed] = useState({});
 
   useEffect(() => {
-    if (loading) return;
-    if (!user) { navigate("/login"); return; }
+    if (authLoading) return;
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+    const uid = user.id || user.uid;
+    if (!uid) { setLoading(false); return; }
 
     let cancelled = false;
-    setIsLoading(true);
-
-    getRevisionPool(user.id)
-      .then((result) => { if (!cancelled) setData(result); })
-      .finally(() => { if (!cancelled) setIsLoading(false); });
-
+    setLoading(true);
+    getRevisionPool(uid)
+      .then((data) => {
+        if (!cancelled) setPool(data);
+      })
+      .catch(err => console.error("[RevisionPage] error:", err))
+      .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
-  }, [user, loading, navigate]);
+  }, [user, authLoading, navigate]);
 
-  // ── derived state ──────────────────────────────────────────────────────────
-
-  const questions = data.questions || [];
-  const question  = questions[current];
-  const selected  = question ? answers[question.id] : undefined;
-  const isRevealed = question ? !!revealed[question.id] : false;
-  const solved    = isRevealed && selected === correctIndex(question);
-  const completed = questions.filter(
-    (q) => revealed[q.id] && answers[q.id] === correctIndex(q)
-  ).length;
-
-  // ── handlers ──────────────────────────────────────────────────────────────
-
-  function selectOption(id, index) {
-    setAnswers((prev) => ({ ...prev, [id]: index }));
-    setRevealed((prev) => ({ ...prev, [id]: false }));
-  }
-
-  function toggleReveal(id) {
-    setRevealed((prev) => ({ ...prev, [id]: !prev[id] }));
-  }
-
-  function reattempt(id) {
-    setAnswers((prev) => { const next = { ...prev }; delete next[id]; return next; });
-    setRevealed((prev) => ({ ...prev, [id]: false }));
-  }
-
-  // ── loading ───────────────────────────────────────────────────────────────
-
-  if (isLoading) {
+  if (loading || authLoading) {
     return (
       <div className="page">
-        <TopNav />
-        <div className="loading-overlay">
-          <div className="loading-spinner" />
+        <TopNavbar />
+        <div className="loading-overlay"><div className="loading-spinner" /></div>
+      </div>
+    );
+  }
+
+  const questions = pool.questions || [];
+  const wrongCount = questions.filter(q => q._reason === "wrong").length;
+  const skippedCount = questions.filter(q => q._reason === "unattempted").length;
+
+  if (questions.length === 0) {
+    return (
+      <div className="page">
+        <TopNavbar />
+        <div className="revision-topbar">
+          <div>
+            <h2>Revision Mode</h2>
+            <p>Questions you got wrong or skipped — practice them till you nail them.</p>
+          </div>
+          <div className="revision-topbar-stats">
+            <div className="revision-stat-chip"><span>Queue</span><strong>0</strong></div>
+            <div className="revision-stat-chip"><span>Attempts</span><strong>{pool.stats?.attempts || 0}</strong></div>
+          </div>
+        </div>
+        <div className="revision-empty-state">
+          <h3>Nothing to revise yet 🎉</h3>
+          <p>Take a few mock exams and any wrong answers will show up here.</p>
+          <button className="btn-primary" onClick={() => navigate("/exams")}>Browse Exams</button>
         </div>
       </div>
     );
   }
 
-  // ── render ────────────────────────────────────────────────────────────────
+  const q = questions[current];
+  const correctIdx = correctIndexOf(q);
 
   return (
     <div className="page">
-      <TopNav />
+      <TopNavbar />
 
-      {/* ── header ── */}
-      <div className="revision-header">
+      {/* ── Top bar ── */}
+      <div className="revision-topbar">
         <div>
           <h2>Revision Mode</h2>
-          <p>Wrong and skipped questions from your attempts. Reattempt them until you get them right.</p>
+          <p>Questions you got wrong or skipped — practice them till you nail them.</p>
         </div>
-        <div className="revision-stats">
-          <div className="stat-chip">
-            <span>Queue</span>
-            <strong>{questions.length}</strong>
-          </div>
-          <div className="stat-chip">
-            <span>Solved</span>
-            <strong>{completed}</strong>
-          </div>
-          <div className="stat-chip">
-            <span>Attempts</span>
-            <strong>{data.stats?.attempts || 0}</strong>
-          </div>
+        <div className="revision-topbar-stats">
+          <div className="revision-stat-chip"><span>Queue</span><strong>{questions.length}</strong></div>
+          <div className="revision-stat-chip"><span>Wrong</span><strong>{wrongCount}</strong></div>
+          <div className="revision-stat-chip"><span>Skipped</span><strong>{skippedCount}</strong></div>
+          <div className="revision-stat-chip"><span>Attempts</span><strong>{pool.stats?.attempts || 0}</strong></div>
         </div>
       </div>
 
-      {/* ── empty state ── */}
-      {questions.length === 0 ? (
-        <div className="empty-state">
-          <h3>Nothing to revise yet</h3>
-          <p>Take a few mock exams. Wrong and skipped questions will show up here.</p>
-          <button className="btn-primary" onClick={() => navigate("/exams")}>
-            Browse Exams
-          </button>
-        </div>
-      ) : (
-        /* ── exam body ── */
-        <div className="ep-body">
+      {/* ── Main layout ── */}
+      <div className="revision-layout">
 
-          {/* ── main panel ── */}
-          <main className="ep-main">
+        {/* ── Question panel (left) ── */}
+        <div className="revision-main">
+          <div className="revision-question-card">
 
-            {/* question meta row */}
-            <div className="exam-question-header">
-              <div className="exam-q-label">
-                <span className="exam-q-badge">Q{current + 1}</span>
-                <span className="exam-q-count">{current + 1} / {questions.length}</span>
-              </div>
-              <span className={`badge-soft ${question._reason === "wrong" ? "badge-danger" : "badge-warning"}`}>
-                {question._reason === "wrong" ? "Previously wrong" : "Skipped"}
-              </span>
-            </div>
-
-            {/* question text */}
-            <div className="ep-question-wrap">
-              <span className="ep-q-badge">{current + 1}</span>
+            {/* Question header */}
+            <div className="revision-question-header">
+              <div className="revision-question-badge">Q.{current + 1}</div>
               <div
-                className="ep-question-text"
-                dangerouslySetInnerHTML={{ __html: question.question || "" }}
+                className="revision-question-text"
+                dangerouslySetInnerHTML={{ __html: q.question || "" }}
               />
             </div>
 
-            {/* options */}
-            <div className="ep-options">
-              {(question.options || []).map((option, index) => (
-                <button
-                  key={index}
-                  type="button"
-                  className={optionClassName(question, index, selected, isRevealed)}
-                  onClick={() => selectOption(question.id, index)}
-                >
-                  <span className="ep-option-radio">
-                    <span className={selected === index ? "ep-radio-filled" : "ep-radio-empty"} />
-                  </span>
-                  <span className="ep-option-letter">{String.fromCharCode(65 + index)}</span>
-                  <span className="ep-option-text">{option}</span>
-                </button>
-              ))}
+            {/* Reason badge */}
+            <div className="revision-reason-row">
+              <span className={`revision-reason-badge ${q._reason === "wrong" ? "revision-badge-wrong" : "revision-badge-skipped"}`}>
+                {q._reason === "wrong" ? "Previously Wrong" : "Previously Skipped"}
+              </span>
+              {q.difficulty && (
+                <span className={`revision-reason-badge revision-badge-level ${
+                  q.difficulty === "Easy" ? "level-easy"
+                  : q.difficulty === "Medium" ? "level-medium"
+                  : "level-hard"
+                }`}>
+                  {q.difficulty}
+                </span>
+              )}
             </div>
 
-            {/* feedback banner */}
-            {isRevealed && (
-              <div className={`revision-feedback ${solved ? "revision-feedback--correct" : "revision-feedback--wrong"}`}>
-                <strong>{solved ? "Correct. Nice recovery." : "Not quite. Check the correct answer and try again."}</strong>
-                {question.explanation && <p>{question.explanation}</p>}
-              </div>
-            )}
-
-            {/* action bar */}
-            <div className="ep-action-bar">
-              <button
-                className="ep-btn ep-btn-outline"
-                disabled={current === 0}
-                onClick={() => setCurrent((v) => Math.max(0, v - 1))}
-              >
-                Previous
-              </button>
-              <button
-                className="ep-btn ep-btn-outline"
-                disabled={selected === undefined}
-                onClick={() => toggleReveal(question.id)}
-              >
-                {isRevealed ? "Hide Answer" : "Check Answer"}
-              </button>
-              <button
-                className="ep-btn ep-btn-outline"
-                onClick={() => reattempt(question.id)}
-              >
-                Reattempt
-              </button>
-              <button
-                className="ep-btn ep-btn-submit"
-                disabled={current === questions.length - 1}
-                onClick={() => setCurrent((v) => Math.min(questions.length - 1, v + 1))}
-              >
-                Next
-              </button>
-            </div>
-          </main>
-
-          {/* ── aside / question palette ── */}
-          <aside className="ep-aside">
-            <h3 className="ep-aside-title">Question Palette</h3>
-
-            <div className="ep-legend">
-              <div className="ep-legend-item">
-                <span className="ep-legend-badge ep-badge-answered">1</span>
-                <span className="ep-legend-label">Solved</span>
-              </div>
-              <div className="ep-legend-item">
-                <span className="ep-legend-badge ep-badge-not-answered">1</span>
-                <span className="ep-legend-label">Tried</span>
-              </div>
-              <div className="ep-legend-item">
-                <span className="ep-legend-badge ep-badge-not-visited">1</span>
-                <span className="ep-legend-label">Pending</span>
-              </div>
-              <div className="ep-legend-item">
-                <span className="ep-legend-badge ep-badge-marked">1</span>
-                <span className="ep-legend-label">Current</span>
-              </div>
-            </div>
-
-            <div className="ep-qgrid">
-              {questions.map((q, index) => {
-                const answered = answers[q.id] !== undefined;
-                const right    = revealed[q.id] && answers[q.id] === correctIndex(q);
-                const cellCls  = [
-                  "ep-qcell",
-                  right ? "ep-qcell--answered" : answered ? "ep-qcell--not-answered" : "ep-qcell--unvisited",
-                  current === index ? "ep-qcell--current" : "",
-                ].join(" ").trim();
-
+            {/* Options — always show correct answer highlighted */}
+            <div className="review-options">
+              {(q.options || []).map((opt, i) => {
+                const isCorrectOpt = i === correctIdx;
                 return (
-                  <button
-                    key={q.id}
-                    type="button"
-                    className={cellCls}
-                    onClick={() => setCurrent(index)}
+                  <div
+                    key={i}
+                    className={`review-option-card ${isCorrectOpt ? "review-correct revision-correct-pulse" : ""}`}
                   >
-                    {index + 1}
-                  </button>
+                    <div className="review-option-label">{String.fromCharCode(65 + i)}.</div>
+                    <div className="review-option-text">{opt}</div>
+                    {isCorrectOpt && (
+                      <div className="revision-correct-tick">✓</div>
+                    )}
+                  </div>
                 );
               })}
             </div>
-          </aside>
 
+            {/* Explanation */}
+            {q.explanation && (
+              <div className="review-explanation">
+                <h4>Explanation</h4>
+                <p>{q.explanation}</p>
+              </div>
+            )}
+
+            {/* Navigation */}
+            <div className="review-navigation">
+              <button
+                className="review-nav-btn"
+                disabled={current === 0}
+                onClick={() => setCurrent(c => Math.max(0, c - 1))}
+              >
+                ← Previous
+              </button>
+              <div className="review-question-count">
+                {current + 1} / {questions.length}
+              </div>
+              <button
+                className="review-nav-btn"
+                disabled={current === questions.length - 1}
+                onClick={() => setCurrent(c => Math.min(questions.length - 1, c + 1))}
+              >
+                Next →
+              </button>
+            </div>
+          </div>
         </div>
-      )}
+
+        {/* ── Sidebar palette (right) ── */}
+        <div className="review-sidebar">
+          <h3>Questions</h3>
+
+          {/* Legend */}
+          <div className="review-legend">
+            <div className="review-legend-item">
+              <span className="review-legend-counter wrong">{wrongCount}</span>
+              Wrong
+            </div>
+            <div className="review-legend-item">
+              <span className="review-legend-counter not-visited">{skippedCount}</span>
+              Skipped
+            </div>
+          </div>
+
+          {/* Palette grid */}
+          <div className="review-palette">
+            {questions.map((item, index) => (
+              <button
+                key={item.id || index}
+                onClick={() => setCurrent(index)}
+                className={`review-palette-btn ${
+                  item._reason === "wrong"
+                    ? "review-palette-wrong"
+                    : "revision-palette-skipped"
+                } ${current === index ? "review-current" : ""}`}
+              >
+                {index + 1}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
