@@ -1159,7 +1159,7 @@ const _resultsProvider = {
 
   getUserResults: async (uid, max = 50) => {
     if (!uid) return [];
-    // Try both column names to handle pre- and post-migration states
+    // Try new snake_case columns first
     const { data, error } = await _supabase
       .from("results")
       .select("*")
@@ -1167,18 +1167,17 @@ const _resultsProvider = {
       .order("submitted_at", { ascending: false })
       .limit(max);
 
-    if (error && error.message.includes("does not exist")) {
-      // Column not yet renamed — fall back to legacy names
-      const { data: legacyData } = await _supabase
-        .from("results")
-        .select("*")
-        .eq("userid", uid)
-        .order("submittedat", { ascending: false })
-        .limit(max);
-      return _normalizeRows(legacyData);
-    }
+    // If new columns work and returned data, use it
+    if (!error && data?.length) return _normalizeRows(data);
 
-    return _normalizeRows(data);
+    // Fall back to legacy column names (userid, submittedat)
+    const { data: legacyData } = await _supabase
+      .from("results")
+      .select("*")
+      .eq("userid", uid)
+      .order("submittedat", { ascending: false })
+      .limit(max);
+    return _normalizeRows(legacyData);
   },
 
   getResultsFiltered: async ({ since, max = 500 } = {}) => {
@@ -1868,19 +1867,36 @@ const _revisionProvider = {
   getRevisionPool: async (uid, { maxResults = 50, maxQuestions = 200 } = {}) => {
     if (!uid) return { questions: [], stats: { totalWrong: 0, attempts: 0 } };
 
-    const { data: results } = await _supabase
+    // Try new snake_case columns first; fall back to legacy (userid, submittedat, no question_ids)
+    let results = null;
+    const newRes = await _supabase
       .from("results")
       .select("answers, question_ids")
       .eq("user_id", uid)
       .order("submitted_at", { ascending: false })
       .limit(maxResults);
 
+    if (!newRes.error && newRes.data?.length) {
+      results = newRes.data;
+    } else {
+      // Legacy: userid column, submittedat ordering, no question_ids column
+      const legRes = await _supabase
+        .from("results")
+        .select("answers")
+        .eq("userid", uid)
+        .order("submittedat", { ascending: false })
+        .limit(maxResults);
+      results = legRes.data;
+    }
+
     if (!results?.length) return { questions: [], stats: { totalWrong: 0, attempts: 0 } };
 
+    // Derive question IDs from answers object keys when question_ids column absent
     const wrongCounts = new Map();
     for (const r of results) {
       const answers = r.answers || {};
-      (r.question_ids || []).forEach(id => {
+      const ids = (r.question_ids?.length ? r.question_ids : Object.keys(answers));
+      ids.forEach(id => {
         const ans = answers[id];
         wrongCounts.set(id, (wrongCounts.get(id) || 0) + (ans === undefined || ans === null ? 1 : 0.5));
       });
@@ -1894,18 +1910,23 @@ const _revisionProvider = {
       .select("*")
       .in("id", candidateIds);
 
-    const byId = new Map((qDocs || []).map(q => [q.id, q]));
+    const byId = new Map((qDocs || []).map(q => [q.id, _normalizeRow(q)]));
     const wrong = [];
     for (const r of results) {
       const answers = r.answers || {};
-      for (const id of r.question_ids || []) {
+      const ids = (r.question_ids?.length ? r.question_ids : Object.keys(answers));
+      for (const id of ids) {
         const q = byId.get(id); if (!q) continue;
         const ans = answers[id];
-        if (ans === undefined || ans === null) wrong.push({ ...q, _reason: "unattempted" });
-        else if (ans !== _correctIndexOf(q))   wrong.push({ ...q, _reason: "wrong" });
+        if (ans === undefined || ans === null) {
+          wrong.push({ ...q, _reason: "unattempted" });
+        } else if (ans !== _correctIndexOf(q)) {
+          wrong.push({ ...q, _reason: "wrong" });
+        }
       }
     }
 
+    // Deduplicate — prefer "wrong" over "unattempted" for same question
     const map = new Map();
     for (const q of wrong) {
       const ex = map.get(q.id);
