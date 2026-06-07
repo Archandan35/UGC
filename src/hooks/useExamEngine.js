@@ -286,6 +286,42 @@ export default function useExamEngine() {
       // Always use async uid resolution — sync getCurrentUid() may be null on page load
       const uid = getCurrentUid() || await provider.getCurrentUidAsync();
 
+      // ── Store wrong/unattempted questions in localStorage for RevisionPage ──
+      // This is the reliable source — DB queries may fail due to schema differences.
+      try {
+        if (uid) {
+          const REVISION_KEY = `revision_pool_${uid}`;
+          const existingRaw = localStorage.getItem(REVISION_KEY);
+          const existing = existingRaw ? JSON.parse(existingRaw) : {};
+          // existing = { [questionId]: { ...questionData, _reason } }
+
+          const ansMap = { A: 0, B: 1, C: 2, D: 3 };
+          questions.forEach((q) => {
+            const userAns = answers[q.id];
+            const correctIdx = typeof q.correctAnswer === "number"
+              ? q.correctAnswer
+              : (ansMap[q.correctAnswer?.trim?.()?.toUpperCase?.()] ?? 0);
+
+            if (userAns === undefined || userAns === null) {
+              // Unattempted — add if not already marked wrong
+              if (!existing[q.id] || existing[q.id]._reason !== "wrong") {
+                existing[q.id] = { ...q, _reason: "unattempted" };
+              }
+            } else if (Number(userAns) !== correctIdx) {
+              // Wrong — always store/overwrite
+              existing[q.id] = { ...q, _reason: "wrong" };
+            } else {
+              // Correct — remove from revision pool if it was there
+              delete existing[q.id];
+            }
+          });
+
+          localStorage.setItem(REVISION_KEY, JSON.stringify(existing));
+        }
+      } catch (lsErr) {
+        console.warn("[submitExam] localStorage revision store failed:", lsErr);
+      }
+
       // Save result — errors are caught inside saveResult and return a local ID,
       // so this should never throw. But wrap anyway for safety.
       let savedId = null;
