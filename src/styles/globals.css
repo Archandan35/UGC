@@ -8232,3 +8232,190 @@ table tr:hover {
   .tnav-hamburger { display: flex; }
   .tnav-logout { display: none; }
 }
+
+
+
+/* ═══════════════════════════════════════════════════════════════
+   REVISION PAGE — redesigned to match Result/Review page layout
+═══════════════════════════════════════════════════════════════ */
+
+.revision-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-5) var(--sp-6);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+}
+.revision-topbar h2 {
+  font-size: 1.4rem;
+  margin: 0 0 var(--sp-2);
+  font-weight: 800;
+  font-family: var(--font-display);
+}
+.revision-topbar p {
+  font-size: 0.83rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.revision-topbar-stats {
+  display: flex;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  align-items: center;
+}
+.revision-stat-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--surface-2, #f8fafc);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--sp-2) var(--sp-4);
+  min-width: 64px;
+  gap: 2px;
+}
+.revision-stat-chip span {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.revision-stat-chip strong {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+/* ── layout ── */
+.revision-layout {
+  display: grid;
+  grid-template-columns: 1fr 260px;
+  gap: var(--sp-5);
+  padding: var(--sp-5) var(--sp-6);
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .revision-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── main question card reuses review-* classes from ResultPage ── */
+.revision-main { min-width: 0; }
+.revision-question-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-6);
+  box-shadow: var(--shadow-sm);
+}
+
+.revision-question-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-4);
+}
+.revision-question-badge {
+  background: var(--blue-600, #2563eb);
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.85rem;
+  border-radius: var(--radius-md);
+  padding: var(--sp-1) var(--sp-3);
+  white-space: nowrap;
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 3px;
+}
+.revision-question-text {
+  font-size: 1.05rem;
+  line-height: 1.65;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+/* ── reason badges ── */
+.revision-reason-row {
+  display: flex;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--sp-4);
+}
+.revision-reason-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1.5px solid currentColor;
+}
+.revision-badge-wrong {
+  background: #fee2e2;
+  color: #b91c1c;
+  border-color: #dc2626;
+}
+.revision-badge-skipped {
+  background: #fef9c3;
+  color: #854d0e;
+  border-color: #ca8a04;
+}
+.revision-badge-level { }
+
+/* ── correct answer pulse (always visible in revision) ── */
+.revision-correct-pulse {
+  animation: revisionCorrectGlow 1.6s ease-in-out infinite alternate;
+}
+@keyframes revisionCorrectGlow {
+  from { box-shadow: 0 0 0 0 rgba(22,163,74,0); }
+  to   { box-shadow: 0 0 0 4px rgba(22,163,74,0.18); }
+}
+.revision-correct-tick {
+  font-size: 1rem;
+  color: #16a34a;
+  font-weight: 800;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+/* ── palette skipped colour (wrong reuses review-palette-wrong) ── */
+.revision-palette-skipped {
+  background: #fef9c3 !important;
+  border-color: #ca8a04;
+  color: #713f12;
+}
+
+/* ── empty state ── */
+.revision-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-4);
+  padding: var(--sp-10) var(--sp-6);
+  margin: var(--sp-5) var(--sp-6);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  text-align: center;
+}
+.revision-empty-state h3 {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin: 0;
+}
+.revision-empty-state p {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+/* ── Remove old flashcard-only revision styles (kept for safety, overridden) ── */
+.revision-header { display: none; }
+.revision-card   { display: none; }
