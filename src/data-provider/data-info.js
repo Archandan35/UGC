@@ -46,6 +46,16 @@ const _supabase = createClient(
 let _channelSeq = 0;
 const _ch = (name) => `${name}-${++_channelSeq}`;
 
+/* ─── UID cache — populated by auth state change, avoids async getSession() ─── */
+let _cachedUid = null;
+_supabase.auth.onAuthStateChange((_event, session) => {
+  _cachedUid = session?.user?.id ?? null;
+});
+// Also populate immediately from existing session (handles page refresh)
+_supabase.auth.getSession().then(({ data: { session } }) => {
+  if (session?.user?.id) _cachedUid = session.user.id;
+});
+
 /* ─── Helpers ──────────────────────────────────────────────── */
 function monthKey(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -515,13 +525,24 @@ const _authProvider = {
   },
 
   getCurrentUid: () => {
-    // Quick synchronous access via cached session
-    const session = _supabase.auth.getSession();
-    if (session && session.then) return null; // async; use subscribeAuthState instead
-    return session?.data?.session?.user?.id ?? null;
+    // Return cached uid (set by auth state subscription above)
+    return _cachedUid;
+  },
+
+  getCurrentUidAsync: async () => {
+    // Definitive async fallback — always accurate
+    if (_cachedUid) return _cachedUid;
+    const { data: { session } } = await _supabase.auth.getSession();
+    return session?.user?.id ?? null;
   },
 
   getAuth: () => _supabase.auth,
+
+  getCurrentUidAsync: async () => {
+    if (_cachedUid) return _cachedUid;
+    const { data: { session } } = await _supabase.auth.getSession();
+    return session?.user?.id ?? null;
+  },
 
   /** Supabase has no "secondary app" concept — create a fresh admin client server-side if needed */
   getSecondaryAuth: () => _supabase.auth,
@@ -1179,27 +1200,53 @@ const _resultsProvider = {
   },
 
   saveResult: async (result, uid) => {
-    const payload = {
-      user_id:          uid || "anonymous",
+    const resolvedUid = uid || _cachedUid || null;
+
+    // Try with legacy column names first (matches actual DB schema from screenshot)
+    const legacyPayload = {
+      userid:         resolvedUid || "anonymous",
+      examid:         result.examId || null,
+      examname:       result.examName || result.examData?.name || null,
+      examtype:       result.mode || result.examType || "mock",
+      score:          result.score ?? 0,
+      totalmarks:     result.totalMarks ?? 0,
+      totalquestions: result.questions?.length ?? result.totalQuestions ?? 0,
+      correct:        result.correct ?? 0,
+      wrong:          result.wrong ?? 0,
+      unanswered:     result.unattempted ?? result.unanswered ?? 0,
+      accuracy:       result.accuracy ?? 0,
+      answers:        result.answers || {},
+      timetaken:      result.timePerQuestion
+        ? Object.values(result.timePerQuestion).reduce((a, b) => a + b, 0)
+        : 0,
+      cheatcount:     result.cheatCount ?? 0,
+      submittedat:    result.submittedAt || new Date().toISOString(),
+      createdat:      new Date().toISOString(),
+    };
+
+    // Attempt legacy insert
+    const legacyRes = await _supabase.from("results").insert(legacyPayload).select("id").single();
+    if (!legacyRes.error) return legacyRes.data.id;
+
+    // If legacy columns don't exist, try new snake_case schema
+    console.warn("[saveResult] legacy columns failed, trying snake_case:", legacyRes.error.message);
+    const newPayload = {
+      user_id:          resolvedUid || "anonymous",
       exam_id:          result.examId || null,
-      paper_id:         result.paperId || null,
-      language:         result.language || null,
-      pyq_year:         result.pyqYear ?? null,
       mode:             result.mode || "mock",
-      score:            result.score || 0,
-      total_marks:      result.totalMarks || 0,
-      correct:          result.correct || 0,
-      wrong:            result.wrong || 0,
-      unattempted:      result.unattempted || 0,
-      accuracy:         result.accuracy || 0,
+      score:            result.score ?? 0,
+      total_marks:      result.totalMarks ?? 0,
+      correct:          result.correct ?? 0,
+      wrong:            result.wrong ?? 0,
+      unattempted:      result.unattempted ?? 0,
+      accuracy:         result.accuracy ?? 0,
       answers:          result.answers || {},
-      time_per_question: result.timePerQuestion || {},
       question_ids:     (result.questions || []).map(q => q.id),
       submitted_at:     result.submittedAt || new Date().toISOString(),
       created_at:       new Date().toISOString(),
     };
     const { data: row } = _check(
-      await _supabase.from("results").insert(payload).select("id").single(),
+      await _supabase.from("results").insert(newPayload).select("id").single(),
       "saveResult"
     );
     return row.id;
