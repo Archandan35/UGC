@@ -9,11 +9,13 @@ import {
   syncBookmarks,
   getCurrentUid,
 } from "../data-layer";
+import { useRole } from "./useRole";
 
 export default function useExamEngine() {
   const { examId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { role } = useRole();
 
   const paperId    = searchParams.get("paperId")  || null;
   const language   = searchParams.get("language") || null;
@@ -230,7 +232,11 @@ export default function useExamEngine() {
       }
       localStorage.removeItem(STORAGE_KEY);
       if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
-      navigate("/result", { state: resultData });
+      if (role === "student") {
+        navigate("/dashboard");
+      } else {
+        navigate("/result", { state: resultData });
+      }
     } catch (err) {
       console.error("submitExam failed:", err);
       setSubmitting(false);
