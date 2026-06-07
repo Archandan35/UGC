@@ -8,6 +8,7 @@ import {
   fetchBookmarks,
   syncBookmarks,
   getCurrentUid,
+  getCurrentUidAsync,
   // Attempt-state helpers from data-layer (no raw localStorage in this hook)
   getAttemptKey,
   saveAttemptState,
@@ -43,6 +44,7 @@ export default function useExamEngine() {
   const [timeLeft,        setTimeLeft]        = useState(1800);
   const [cheatCount,      setCheatCount]      = useState(0);
   const [submitting,      setSubmitting]      = useState(false);
+  const [submitError,     setSubmitError]     = useState(null);
   const [showLeaveModal,  setShowLeaveModal]  = useState(false);
 
   // Prevent duplicate submissions even across re-renders / rapid clicks
@@ -243,6 +245,7 @@ export default function useExamEngine() {
     if (submitting || submittedRef.current) return;
     submittedRef.current = true;
     setSubmitting(true);
+    setSubmitError(null);
 
     const map = { A: 0, B: 1, C: 2, D: 3 };
     let correct = 0, wrong = 0, unattempted = 0;
@@ -267,6 +270,7 @@ export default function useExamEngine() {
 
     const resultData = {
       examId, paperId, language, pyqYear, mode,
+      examName: examData?.name || examData?.title || null,
       score, totalMarks,
       correct, wrong,
       unanswered: unattempted,
@@ -279,13 +283,14 @@ export default function useExamEngine() {
     };
 
     try {
-      const uid = getCurrentUid();
+      // Always use async uid resolution — sync getCurrentUid() may be null on page load
+      const uid = getCurrentUid() || await getCurrentUidAsync();
       const savedId = await saveResult(resultData);
       if (savedId) resultData.id = savedId;
 
       if (uid) {
-        await syncBookmarks(uid, bookmarks, questions);
-        await recordAttempt({ uid, scorePct, questionCount: questions.length });
+        await syncBookmarks(uid, bookmarks, questions).catch(e => console.warn("syncBookmarks:", e));
+        await recordAttempt({ uid, scorePct, questionCount: questions.length }).catch(e => console.warn("recordAttempt:", e));
       }
 
       // Clear saved attempt — exam is done, no resume needed
@@ -293,10 +298,11 @@ export default function useExamEngine() {
 
       if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
 
-      // Always navigate to Result Page — fixes Issue 1
+      // Navigate to Result Page with all result data
       navigate("/result", { state: resultData });
     } catch (err) {
       console.error("submitExam failed:", err);
+      setSubmitError(err.message || "Submission failed. Please try again.");
       // Allow retry on error
       submittedRef.current = false;
       setSubmitting(false);
@@ -328,7 +334,7 @@ export default function useExamEngine() {
   const selectedOpt = currentQ ? answers[currentQ.id] : undefined;
 
   return {
-    loading, submitting, questions, examData, mode, pyqYear, paperId, language,
+    loading, submitting, submitError, questions, examData, mode, pyqYear, paperId, language,
     currentQuestion, setCurrentQuestion, answers, visited, review, bookmarks,
     timePerQuestion, currentQ, selectedOpt, selectOption, handleNext, handlePrev,
     goTo, clearResponse, toggleReview, toggleBookmark, submitExam,
