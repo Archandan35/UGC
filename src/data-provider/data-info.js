@@ -538,12 +538,6 @@ const _authProvider = {
 
   getAuth: () => _supabase.auth,
 
-  getCurrentUidAsync: async () => {
-    if (_cachedUid) return _cachedUid;
-    const { data: { session } } = await _supabase.auth.getSession();
-    return session?.user?.id ?? null;
-  },
-
   /** Supabase has no "secondary app" concept — create a fresh admin client server-side if needed */
   getSecondaryAuth: () => _supabase.auth,
 
@@ -1855,7 +1849,8 @@ const _studyPlansProvider = {
 /* ═══════════════════════════════════════════════════════════════
    REVISION
 ═══════════════════════════════════════════════════════════════ */
-getRevisionPool: async (uid, { maxResults = 50, maxQuestions = 200 } = {}) => {
+const _revisionProvider = {
+  getRevisionPool: async (uid, { maxResults = 50, maxQuestions = 200 } = {}) => {
     if (!uid) return { questions: [], stats: { totalWrong: 0, attempts: 0 } };
 
     // Try new snake_case columns first; fall back to legacy (userid, submittedat, no question_ids)
@@ -1946,95 +1941,7 @@ getRevisionPool: async (uid, { maxResults = 50, maxQuestions = 200 } = {}) => {
       stats: { totalWrong: map.size, attempts: results.length },
     };
   },
-
-    // Try new snake_case columns first; fall back to legacy (userid, submittedat, no question_ids)
-    let results = null;
-    const newRes = await _supabase
-      .from("results")
-      .select("answers, question_ids")
-      .eq("user_id", uid)
-      .order("submitted_at", { ascending: false })
-      .limit(maxResults);
-
-    if (!newRes.error && newRes.data?.length) {
-      results = newRes.data;
-    } else {
-      // Legacy: userid column, submittedat ordering, no question_ids column
-      const legRes = await _supabase
-        .from("results")
-        .select("answers")
-        .eq("userid", uid)
-        .order("submittedat", { ascending: false })
-        .limit(maxResults);
-      results = legRes.data;
-    }
-
-    if (!results?.length) return { questions: [], stats: { totalWrong: 0, attempts: 0 } };
-
-    // ── FIXED: only collect IDs that were actually wrong or unattempted ──
-    // When question_ids is present: unattempted = in question_ids but NOT in answers
-    // When question_ids absent: only answers keys exist — collect those answered wrongly
-    // We can't determine unattempted in that case, so we focus on wrong answers only.
-    const candidateIdSet = new Set();
-    for (const r of results) {
-      const answers = r.answers || {};
-      const qIds = r.question_ids?.length ? r.question_ids : null;
-      if (qIds) {
-        // Full question list available — find unattempted (not in answers) and wrong
-        qIds.forEach(id => {
-          const ans = answers[id];
-          if (ans === undefined || ans === null) {
-            // Unattempted — need to fetch question to confirm, add as candidate
-            candidateIdSet.add(id);
-          } else {
-            // Answered — will filter wrong ones after fetching question data
-            candidateIdSet.add(id);
-          }
-        });
-      } else {
-        // No question_ids column — only answered questions are available
-        Object.keys(answers).forEach(id => candidateIdSet.add(id));
-      }
-    }
-
-    const candidateIds = [...candidateIdSet].slice(0, maxQuestions);
-    if (!candidateIds.length) return { questions: [], stats: { totalWrong: 0, attempts: results.length } };
-
-    const { data: qDocs } = await _supabase
-      .from("questions")
-      .select("*")
-      .in("id", candidateIds);
-
-    const byId = new Map((qDocs || []).map(q => [q.id, _normalizeRow(q)]));
-
-    // ── Second pass: classify each question as wrong or unattempted ──
-    const wrong = [];
-    for (const r of results) {
-      const answers = r.answers || {};
-      const qIds = r.question_ids?.length ? r.question_ids : Object.keys(answers);
-      for (const id of qIds) {
-        const q = byId.get(id); if (!q) continue;
-        const ans = answers[id];
-        if (ans === undefined || ans === null) {
-          wrong.push({ ...q, _reason: "unattempted" });
-        } else if (ans !== _correctIndexOf(q)) {
-          wrong.push({ ...q, _reason: "wrong" });
-        }
-        // Correct answers are intentionally excluded from revision pool
-      }
-    }
-
-    // Deduplicate — prefer "wrong" over "unattempted" for same question
-    const map = new Map();
-    for (const q of wrong) {
-      const ex = map.get(q.id);
-      if (!ex || (ex._reason === "unattempted" && q._reason === "wrong")) map.set(q.id, q);
-    }
-    return {
-      questions: [...map.values()].slice(0, maxQuestions),
-      stats: { totalWrong: map.size, attempts: results.length },
-    };
-  },
+};
 
 /* ═══════════════════════════════════════════════════════════════
    ANALYTICS / MOCK GENERATOR  (table: analyticsEvents)
