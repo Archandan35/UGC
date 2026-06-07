@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /exam
+Disallow: /result
+
+Sitemap: https://your-domain.com/sitemap.xml
