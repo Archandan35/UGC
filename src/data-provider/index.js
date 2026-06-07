@@ -1,0 +1,1 @@
+export { provider } from "./data-info";
