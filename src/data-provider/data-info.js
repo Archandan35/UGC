@@ -1875,53 +1875,56 @@ const _revisionProvider = {
   getRevisionPool: async (uid, { maxResults = 50, maxQuestions = 200 } = {}) => {
     if (!uid) return { questions: [], stats: { totalWrong: 0, attempts: 0 } };
 
-    // Try new snake_case columns first; fall back to legacy (userid, submittedat, no question_ids)
+    // ── Step 1: Fetch results rows for this user ──────────────────────────────
+    // The DB may use "userid" (legacy) or "user_id" (new). Try both and use
+    // whichever returns rows. Also try fetching question_ids if the column exists.
     let results = null;
+
+    // Try new snake_case columns first
     const newRes = await _supabase
       .from("results")
-      .select("answers, question_ids")
+      .select("answers, questions")
       .eq("user_id", uid)
       .order("submitted_at", { ascending: false })
       .limit(maxResults);
 
     if (!newRes.error && newRes.data?.length) {
       results = newRes.data;
-    } else {
-      // Legacy: userid column, submittedat ordering, no question_ids column
+    }
+
+    // Try legacy userid column (always try — might be the only schema)
+    if (!results?.length) {
       const legRes = await _supabase
         .from("results")
-        .select("answers")
+        .select("answers, questions")
         .eq("userid", uid)
         .order("submittedat", { ascending: false })
         .limit(maxResults);
-      results = legRes.data;
+      if (!legRes.error && legRes.data?.length) results = legRes.data;
     }
 
+    // Absolute fallback — no filter on user (shouldn't reach, but prevents empty)
+    // Actually skip this to avoid privacy issues. Just return empty if nothing found.
     if (!results?.length) return { questions: [], stats: { totalWrong: 0, attempts: 0 } };
 
-    // ── FIXED: only collect IDs that were actually wrong or unattempted ──
-    // When question_ids is present: unattempted = in question_ids but NOT in answers
-    // When question_ids absent: only answers keys exist — collect those answered wrongly
-    // We can't determine unattempted in that case, so we focus on wrong answers only.
+    // ── Step 2: Collect all candidate question IDs ────────────────────────────
+    // results rows have:
+    //   answers   = { [questionId]: selectedOptionIndex }  (always present)
+    //   questions = [ full question objects ] OR [ question IDs ] OR null
     const candidateIdSet = new Set();
     for (const r of results) {
       const answers = r.answers || {};
-      const qIds = r.question_ids?.length ? r.question_ids : null;
-      if (qIds) {
-        // Full question list available — find unattempted (not in answers) and wrong
-        qIds.forEach(id => {
-          const ans = answers[id];
-          if (ans === undefined || ans === null) {
-            // Unattempted — need to fetch question to confirm, add as candidate
-            candidateIdSet.add(id);
-          } else {
-            // Answered — will filter wrong ones after fetching question data
-            candidateIdSet.add(id);
-          }
-        });
+      // Extract question IDs from the "questions" column (array of objects or IDs)
+      const qArr = Array.isArray(r.questions) ? r.questions : null;
+      const qIds = qArr?.length
+        ? qArr.map(q => (typeof q === "object" ? q.id : q)).filter(Boolean)
+        : null;
+
+      if (qIds?.length) {
+        qIds.forEach(id => candidateIdSet.add(String(id)));
       } else {
-        // No question_ids column — only answered questions are available
-        Object.keys(answers).forEach(id => candidateIdSet.add(id));
+        // Fallback: only answered questions available via answers keys
+        Object.keys(answers).forEach(id => candidateIdSet.add(String(id)));
       }
     }
 
@@ -1933,22 +1936,28 @@ const _revisionProvider = {
       .select("*")
       .in("id", candidateIds);
 
-    const byId = new Map((qDocs || []).map(q => [q.id, _normalizeRow(q)]));
+    const byId = new Map((qDocs || []).map(q => [String(q.id), _normalizeRow(q)]));
 
-    // ── Second pass: classify each question as wrong or unattempted ──
+    // ── Step 4: Classify each question as wrong or unattempted ───────────────
     const wrong = [];
     for (const r of results) {
       const answers = r.answers || {};
-      const qIds = r.question_ids?.length ? r.question_ids : Object.keys(answers);
+      const qArr = Array.isArray(r.questions) ? r.questions : null;
+      const qIdsFromCol = qArr?.length
+        ? qArr.map(q => (typeof q === "object" ? q.id : q)).filter(Boolean).map(String)
+        : null;
+      const qIds = qIdsFromCol?.length ? qIdsFromCol : Object.keys(answers).map(String);
+
       for (const id of qIds) {
         const q = byId.get(id); if (!q) continue;
         const ans = answers[id];
-        if (ans === undefined || ans === null) {
+        if (ans === undefined || ans === null || ans === "" || ans === -1) {
           wrong.push({ ...q, _reason: "unattempted" });
-        } else if (ans !== _correctIndexOf(q)) {
+        } else if (Number(ans) !== _correctIndexOf(q)) {
+          // Number() handles both stored-as-string "2" and numeric 2
           wrong.push({ ...q, _reason: "wrong" });
         }
-        // Correct answers are intentionally excluded from revision pool
+        // Correct answers excluded from revision pool
       }
     }
 
