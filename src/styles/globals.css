@@ -7935,3 +7935,300 @@ table tr:hover {
 @media (max-width: 480px) {
   .exam-submit-modal { padding: var(--sp-6) var(--sp-4) var(--sp-4); }
 }
+
+/* ════════════════════════════════════════════════════════════
+   TOP NAVBAR — category dropdown with hover animation
+   ════════════════════════════════════════════════════════════ */
+
+.tnav {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 60px;
+  padding: 0 1.5rem;
+  background: linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 60%, #2563eb 100%);
+  box-shadow: 0 2px 16px rgba(30,58,138,0.35);
+  backdrop-filter: blur(8px);
+}
+
+/* Brand */
+.tnav-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem 0.75rem 0.25rem 0;
+  margin-right: 0.5rem;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+.tnav-brand-icon { font-size: 1.35rem; }
+.tnav-brand-text {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+/* Category buttons row */
+.tnav-cats {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  flex: 1;
+}
+
+.tnav-cat { position: relative; }
+
+.tnav-cat-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.85);
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: 0.4rem 0.7rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+.tnav-cat-btn:hover,
+.tnav-cat-btn.tnav-cat-open {
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+}
+.tnav-cat-btn.tnav-cat-active {
+  background: rgba(255,255,255,0.2);
+  color: #fff;
+}
+
+.tnav-chevron {
+  transition: transform 0.2s ease;
+  opacity: 0.7;
+  color: #fff;
+}
+.tnav-chevron-up { transform: rotate(180deg); }
+
+/* Dropdown */
+.tnav-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 240px;
+  z-index: 2000;
+  animation: tnav-drop-in 0.18s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+
+@keyframes tnav-drop-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.tnav-dropdown-inner {
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(30,58,138,0.18), 0 2px 8px rgba(0,0,0,0.08);
+  padding: 0.5rem;
+  border: 1px solid rgba(30,58,138,0.08);
+}
+
+.tnav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0.55rem 0.75rem;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.13s, transform 0.13s;
+  position: relative;
+}
+.tnav-item:hover {
+  background: #eff6ff;
+  transform: translateX(3px);
+}
+.tnav-item-current {
+  background: #dbeafe;
+}
+.tnav-item-current:hover {
+  background: #bfdbfe;
+}
+
+.tnav-item-icon {
+  font-size: 1.15rem;
+  width: 1.6rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+.tnav-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+}
+.tnav-item-label {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #1e3a8a;
+  line-height: 1.2;
+}
+.tnav-item-desc {
+  font-size: 0.75rem;
+  color: #64748b;
+  line-height: 1.2;
+}
+.tnav-item-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2563eb;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* Right section */
+.tnav-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.tnav-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.25);
+  border: 2px solid rgba(255,255,255,0.5);
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tnav-avatar:hover {
+  background: rgba(255,255,255,0.35);
+  transform: scale(1.08);
+}
+
+.tnav-username {
+  color: rgba(255,255,255,0.8);
+  font-size: 0.82rem;
+  font-weight: 500;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tnav-logout {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(239,68,68,0.15);
+  border: 1.5px solid rgba(239,68,68,0.4);
+  color: #fca5a5;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0.35rem 0.75rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.tnav-logout:hover {
+  background: rgba(239,68,68,0.3);
+  border-color: rgba(239,68,68,0.7);
+  color: #fff;
+}
+
+/* Hamburger (mobile) */
+.tnav-hamburger {
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+}
+.tnav-hamburger span {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: #fff;
+  border-radius: 2px;
+  transition: all 0.2s;
+}
+
+/* Mobile menu */
+.tnav-mobile {
+  position: fixed;
+  top: 60px;
+  left: 0;
+  right: 0;
+  background: #fff;
+  z-index: 999;
+  padding: 1rem;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+  animation: tnav-drop-in 0.2s ease both;
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+}
+.tnav-mobile-cat { margin-bottom: 1rem; }
+.tnav-mobile-cat-label {
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  padding: 0 0.5rem 0.4rem;
+}
+.tnav-mobile-item {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1e293b;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.tnav-mobile-item:hover { background: #eff6ff; }
+.tnav-mobile-item-active { background: #dbeafe; color: #1e3a8a; }
+.tnav-mobile-logout {
+  width: 100%;
+  padding: 0.6rem;
+  background: #fef2f2;
+  border: none;
+  border-radius: 8px;
+  color: #dc2626;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 768px) {
+  .tnav-cats, .tnav-username { display: none; }
+  .tnav-hamburger { display: flex; }
+  .tnav-logout { display: none; }
+}
