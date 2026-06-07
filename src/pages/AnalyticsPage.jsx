@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
-import { getResultsFiltered, getUsers, getQuestions } from "../data-layer";
+import { getResultsFiltered, getUsers, getQuestions, getUserResults } from "../data-layer";
 import AdminSidebar from "../components/AdminSidebar";
 import TopNavbar from "../components/TopNavbar";
 import { LineTrend, BarBreakdown, DonutShare } from "../components/analytics/Charts";
+import { useAuth } from "../context/AuthContext";
 
 /**
  * Analytics dashboard.
  *
- * Reads the most recent 500 `results` docs (ordered by createdAt desc)
- * and the `users` summary data ONCE. The page is
- * intentionally read-only and uses server-side ordering + limit so the
- * Database cost stays bounded as the data grows.
+ * - Admin users: see all results + user totals + AdminSidebar (unchanged behaviour)
+ * - Student users: see only their own results, no AdminSidebar
  */
 export default function AnalyticsPage() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [results, setResults] = useState([]);
@@ -26,21 +28,37 @@ export default function AnalyticsPage() {
       setError(null);
       try {
         const since = Date.now() - rangeDays * 24 * 60 * 60 * 1000;
-        const [resultsData, usersData, questionsData] = await Promise.all([
-          getResultsFiltered({ since, max: 500 }),
-          getUsers(),
-          getQuestions(),
-        ]);
 
-        if (cancelled) return;
-
-        setResults(resultsData);
-        const proUsers = usersData.filter((u) => u.isPro).length;
-        setTotals({
-          users: usersData.length,
-          proUsers,
-          questions: questionsData.length > 0 ? "—" : 0,
-        });
+        if (isAdmin) {
+          // Admin: fetch ALL results + users + questions
+          const [resultsData, usersData, questionsData] = await Promise.all([
+            getResultsFiltered({ since, max: 500 }),
+            getUsers(),
+            getQuestions(),
+          ]);
+          if (cancelled) return;
+          setResults(resultsData);
+          const proUsers = usersData.filter((u) => u.isPro).length;
+          setTotals({
+            users: usersData.length,
+            proUsers,
+            questions: questionsData.length > 0 ? questionsData.length : 0,
+          });
+        } else {
+          // Student: fetch only their own results
+          const uid = user?.id || user?.uid;
+          if (!uid) { if (!cancelled) setLoading(false); return; }
+          const resultsData = await getUserResults(uid, 500);
+          if (cancelled) return;
+          // Filter to selected date range client-side
+          const sinceTs = Date.now() - rangeDays * 24 * 60 * 60 * 1000;
+          const filtered = resultsData.filter((r) => {
+            const ts = r.createdAt || r.submittedAt || r.createdat || r.submittedat;
+            return ts ? new Date(ts).getTime() >= sinceTs : true;
+          });
+          setResults(filtered);
+          setTotals({ users: 0, proUsers: 0, questions: 0 });
+        }
       } catch (err) {
         console.error("[AnalyticsPage] load failed", err);
         if (!cancelled) setError(err.message || "Failed to load analytics");
@@ -49,10 +67,8 @@ export default function AnalyticsPage() {
       }
     }
     load();
-    return () => {
-      cancelled = true;
-    };
-  }, [rangeDays]);
+    return () => { cancelled = true; };
+  }, [rangeDays, isAdmin, user]);
 
   /* ─────────────── Derived datasets ─────────────── */
 
@@ -66,7 +82,7 @@ export default function AnalyticsPage() {
       buckets.set(key, 0);
     }
     results.forEach((r) => {
-      const ts = r.createdAt || r.submittedAt;
+      const ts = r.createdAt || r.submittedAt || r.createdat || r.submittedat;
       if (!ts) return;
       const key = new Date(ts).toISOString().slice(0, 10);
       if (buckets.has(key)) buckets.set(key, buckets.get(key) + 1);
@@ -80,7 +96,7 @@ export default function AnalyticsPage() {
   const subjectBreakdown = useMemo(() => {
     const map = new Map();
     results.forEach((r) => {
-      const s = r.subject || r.examSubject || "Other";
+      const s = r.subject || r.examSubject || r.examname || "Other";
       map.set(s, (map.get(s) || 0) + 1);
     });
     return Array.from(map.entries())
@@ -96,7 +112,9 @@ export default function AnalyticsPage() {
       const pct =
         typeof r.percentage === "number"
           ? r.percentage
-          : r.score && r.total
+          : r.score != null && r.totalmarks
+          ? (r.score / r.totalmarks) * 100
+          : r.score != null && r.total
           ? (r.score / r.total) * 100
           : null;
       if (pct == null) return;
@@ -114,7 +132,9 @@ export default function AnalyticsPage() {
       .map((r) =>
         typeof r.percentage === "number"
           ? r.percentage
-          : r.score && r.total
+          : r.score != null && r.totalmarks
+          ? (r.score / r.totalmarks) * 100
+          : r.score != null && r.total
           ? (r.score / r.total) * 100
           : null
       )
@@ -123,40 +143,48 @@ export default function AnalyticsPage() {
     return Math.round(scored.reduce((a, b) => a + b, 0) / scored.length);
   }, [results]);
 
-  return (
-    <div className="admin-shell">
-      <AdminSidebar />
-      <div className="admin-main">
-        <TopNavbar />
-        <div className="page analytics-page">
-          <header className="analytics-header">
-            <div>
-              <h1>Analytics</h1>
-              <p className="muted">
-                Last {rangeDays} days · {results.length} exam attempts
-              </p>
-            </div>
-            <div className="analytics-range">
-              {[7, 30, 90].map((d) => (
-                <button
-                  key={d}
-                  className={`chip ${rangeDays === d ? "chip--active" : ""}`}
-                  onClick={() => setRangeDays(d)}
-                >
-                  {d}d
-                </button>
-              ))}
-            </div>
-          </header>
+  /* ─────────────── Student accuracy stat ─────────────── */
+  const totalCorrect = useMemo(() =>
+    results.reduce((s, r) => s + (r.correct ?? 0), 0), [results]);
+  const totalWrong = useMemo(() =>
+    results.reduce((s, r) => s + (r.wrong ?? 0), 0), [results]);
 
-          {error && (
-            <div className="card card--error">
-              <strong>Could not load analytics.</strong>
-              <p>{error}</p>
-            </div>
-          )}
+  /* ─────────────── Render ─────────────── */
 
-          <section className="stat-grid">
+  const inner = (
+    <div className="page analytics-page">
+      <header className="analytics-header">
+        <div>
+          <h1>Analytics</h1>
+          <p className="muted">
+            {isAdmin
+              ? `Last ${rangeDays} days · ${results.length} total exam attempts`
+              : `Last ${rangeDays} days · your ${results.length} exam attempts`}
+          </p>
+        </div>
+        <div className="analytics-range">
+          {[7, 30, 90].map((d) => (
+            <button
+              key={d}
+              className={`chip ${rangeDays === d ? "chip--active" : ""}`}
+              onClick={() => setRangeDays(d)}
+            >
+              {d}d
+            </button>
+          ))}
+        </div>
+      </header>
+
+      {error && (
+        <div className="card card--error">
+          <strong>Could not load analytics.</strong>
+          <p>{error}</p>
+        </div>
+      )}
+
+      <section className="stat-grid">
+        {isAdmin ? (
+          <>
             <div className="stat-card">
               <span className="stat-card__label">Total users</span>
               <span className="stat-card__value">{totals.users}</span>
@@ -173,37 +201,77 @@ export default function AnalyticsPage() {
               <span className="stat-card__label">Average score</span>
               <span className="stat-card__value">{avgScore}%</span>
             </div>
-          </section>
-
-          <section className="analytics-row">
-            <div className="card">
-              <h3>Daily exam attempts</h3>
-              {loading ? (
-                <div className="skeleton skeleton--chart" />
-              ) : (
-                <LineTrend data={dailyExams} label="Attempts" />
-              )}
+          </>
+        ) : (
+          <>
+            <div className="stat-card">
+              <span className="stat-card__label">Exams taken</span>
+              <span className="stat-card__value">{results.length}</span>
             </div>
-            <div className="card">
-              <h3>Pass / Fail distribution</h3>
-              {loading ? (
-                <div className="skeleton skeleton--chart" />
-              ) : (
-                <DonutShare data={passFailDist} />
-              )}
+            <div className="stat-card">
+              <span className="stat-card__label">Avg score</span>
+              <span className="stat-card__value">{avgScore}%</span>
             </div>
-          </section>
+            <div className="stat-card">
+              <span className="stat-card__label">Correct answers</span>
+              <span className="stat-card__value">{totalCorrect}</span>
+            </div>
+            <div className="stat-card">
+              <span className="stat-card__label">Wrong answers</span>
+              <span className="stat-card__value">{totalWrong}</span>
+            </div>
+          </>
+        )}
+      </section>
 
-          <section className="card">
-            <h3>Attempts by subject (top 8)</h3>
-            {loading ? (
-              <div className="skeleton skeleton--chart" />
-            ) : (
-              <BarBreakdown data={subjectBreakdown} label="Attempts" />
-            )}
-          </section>
+      <section className="analytics-row">
+        <div className="card">
+          <h3>Daily exam attempts</h3>
+          {loading ? (
+            <div className="skeleton skeleton--chart" />
+          ) : (
+            <LineTrend data={dailyExams} label="Attempts" />
+          )}
+        </div>
+        <div className="card">
+          <h3>Pass / Fail distribution</h3>
+          {loading ? (
+            <div className="skeleton skeleton--chart" />
+          ) : (
+            <DonutShare data={passFailDist} />
+          )}
+        </div>
+      </section>
+
+      <section className="card">
+        <h3>{isAdmin ? "Attempts by subject (top 8)" : "Your attempts by exam (top 8)"}</h3>
+        {loading ? (
+          <div className="skeleton skeleton--chart" />
+        ) : (
+          <BarBreakdown data={subjectBreakdown} label="Attempts" />
+        )}
+      </section>
+    </div>
+  );
+
+  // Admin: wrap in admin shell with sidebar
+  if (isAdmin) {
+    return (
+      <div className="admin-shell">
+        <AdminSidebar />
+        <div className="admin-main">
+          <TopNavbar />
+          {inner}
         </div>
       </div>
+    );
+  }
+
+  // Student: just the page with TopNavbar, no admin sidebar
+  return (
+    <div className="page">
+      <TopNavbar />
+      {inner}
     </div>
   );
 }
