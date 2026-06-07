@@ -1873,103 +1873,139 @@ function _correctIndexOf(q) {
 
 const _revisionProvider = {
   getRevisionPool: async (uid, { maxResults = 50, maxQuestions = 200 } = {}) => {
-    if (!uid) return { questions: [], stats: { totalWrong: 0, attempts: 0 } };
+    if (!uid) {
+      console.warn("[RevisionPool] called with no uid");
+      return { questions: [], stats: { totalWrong: 0, attempts: 0 } };
+    }
 
-    // ── Step 1: Fetch results rows for this user ──────────────────────────────
-    // The DB may use "userid" (legacy) or "user_id" (new). Try both and use
-    // whichever returns rows. Also try fetching question_ids if the column exists.
+    console.log("[RevisionPool] loading for uid:", uid);
+
+    // ── Step 1: Fetch results rows ────────────────────────────────────────────
+    // Only select "answers" — guaranteed to exist in legacy schema.
+    // Try userid (legacy) first since that's what saveResult writes.
     let results = null;
 
-    // Try new snake_case columns first
-    const newRes = await _supabase
+    const legRes = await _supabase
       .from("results")
-      .select("answers, questions")
-      .eq("user_id", uid)
-      .order("submitted_at", { ascending: false })
+      .select("answers")
+      .eq("userid", uid)
+      .order("submittedat", { ascending: false })
       .limit(maxResults);
 
-    if (!newRes.error && newRes.data?.length) {
-      results = newRes.data;
+    console.log("[RevisionPool] userid query →", {
+      rows: legRes.data?.length ?? 0,
+      error: legRes.error?.message ?? null,
+    });
+
+    if (!legRes.error && legRes.data?.length) {
+      results = legRes.data;
     }
 
-    // Try legacy userid column (always try — might be the only schema)
+    // Try snake_case user_id if legacy returned nothing
     if (!results?.length) {
-      const legRes = await _supabase
+      const newRes = await _supabase
         .from("results")
-        .select("answers, questions")
-        .eq("userid", uid)
-        .order("submittedat", { ascending: false })
+        .select("answers")
+        .eq("user_id", uid)
+        .order("submitted_at", { ascending: false })
         .limit(maxResults);
-      if (!legRes.error && legRes.data?.length) results = legRes.data;
+
+      console.log("[RevisionPool] user_id query →", {
+        rows: newRes.data?.length ?? 0,
+        error: newRes.error?.message ?? null,
+      });
+
+      if (!newRes.error && newRes.data?.length) results = newRes.data;
     }
 
-    // Absolute fallback — no filter on user (shouldn't reach, but prevents empty)
-    // Actually skip this to avoid privacy issues. Just return empty if nothing found.
-    if (!results?.length) return { questions: [], stats: { totalWrong: 0, attempts: 0 } };
+    // Last resort: fetch all results (no user filter) and filter in JS
+    // This handles edge cases where the uid stored differs from current uid
+    if (!results?.length) {
+      console.warn("[RevisionPool] both uid queries empty — fetching all results to debug");
+      const allRes = await _supabase
+        .from("results")
+        .select("userid, user_id, answers")
+        .order("submittedat", { ascending: false })
+        .limit(20);
+      console.log("[RevisionPool] sample results rows:", allRes.data?.map(r => ({
+        userid: r.userid, user_id: r.user_id,
+        answerCount: Object.keys(r.answers || {}).length,
+      })));
+      // Filter in JS with loose match
+      const filtered = (allRes.data || []).filter(r =>
+        r.userid === uid || r.user_id === uid
+      );
+      if (filtered.length) results = filtered;
+    }
 
-    // ── Step 2: Collect all candidate question IDs ────────────────────────────
-    // results rows have:
-    //   answers   = { [questionId]: selectedOptionIndex }  (always present)
-    //   questions = [ full question objects ] OR [ question IDs ] OR null
+    if (!results?.length) {
+      console.warn("[RevisionPool] no results found for uid:", uid);
+      return { questions: [], stats: { totalWrong: 0, attempts: 0 } };
+    }
+
+    console.log("[RevisionPool] found", results.length, "result rows");
+
+    // ── Step 2: Collect all answered question IDs from answers map ────────────
+    // answers = { [questionId]: selectedOptionIndex }
     const candidateIdSet = new Set();
     for (const r of results) {
-      const answers = r.answers || {};
-      // Extract question IDs from the "questions" column (array of objects or IDs)
-      const qArr = Array.isArray(r.questions) ? r.questions : null;
-      const qIds = qArr?.length
-        ? qArr.map(q => (typeof q === "object" ? q.id : q)).filter(Boolean)
-        : null;
-
-      if (qIds?.length) {
-        qIds.forEach(id => candidateIdSet.add(String(id)));
-      } else {
-        // Fallback: only answered questions available via answers keys
-        Object.keys(answers).forEach(id => candidateIdSet.add(String(id)));
-      }
+      const ans = r.answers;
+      if (!ans || typeof ans !== "object") continue;
+      Object.keys(ans).forEach(id => { if (id) candidateIdSet.add(String(id)); });
     }
 
     const candidateIds = [...candidateIdSet].slice(0, maxQuestions);
-    if (!candidateIds.length) return { questions: [], stats: { totalWrong: 0, attempts: results.length } };
+    console.log("[RevisionPool] candidate question IDs:", candidateIds.length);
 
-    const { data: qDocs } = await _supabase
+    if (!candidateIds.length) {
+      console.warn("[RevisionPool] answers map is empty in all results rows");
+      return { questions: [], stats: { totalWrong: 0, attempts: results.length } };
+    }
+
+    // ── Step 3: Fetch question data ────────────────────────────────────────────
+    const { data: qDocs, error: qErr } = await _supabase
       .from("questions")
       .select("*")
       .in("id", candidateIds);
 
+    console.log("[RevisionPool] questions fetched:", qDocs?.length ?? 0, "error:", qErr?.message ?? null);
+
     const byId = new Map((qDocs || []).map(q => [String(q.id), _normalizeRow(q)]));
 
-    // ── Step 4: Classify each question as wrong or unattempted ───────────────
-    const wrong = [];
-    for (const r of results) {
-      const answers = r.answers || {};
-      const qArr = Array.isArray(r.questions) ? r.questions : null;
-      const qIdsFromCol = qArr?.length
-        ? qArr.map(q => (typeof q === "object" ? q.id : q)).filter(Boolean).map(String)
-        : null;
-      const qIds = qIdsFromCol?.length ? qIdsFromCol : Object.keys(answers).map(String);
+    // ── Step 4: Classify wrong vs correct ────────────────────────────────────
+    const wrongMap = new Map();
+    let totalAnswered = 0;
 
-      for (const id of qIds) {
-        const q = byId.get(id); if (!q) continue;
-        const ans = answers[id];
-        if (ans === undefined || ans === null || ans === "" || ans === -1) {
-          wrong.push({ ...q, _reason: "unattempted" });
-        } else if (Number(ans) !== _correctIndexOf(q)) {
-          // Number() handles both stored-as-string "2" and numeric 2
-          wrong.push({ ...q, _reason: "wrong" });
+    for (const r of results) {
+      const answersMap = r.answers || {};
+      for (const [id, ans] of Object.entries(answersMap)) {
+        const q = byId.get(String(id));
+        if (!q) continue;
+        totalAnswered++;
+
+        const correctIdx = _correctIndexOf(q);
+        const userIdx = (ans === null || ans === undefined || ans === "" || ans === -1)
+          ? null
+          : Number(ans);
+
+        console.log(`[RevisionPool] q ${id}: user=${userIdx} correct=${correctIdx} match=${userIdx === correctIdx}`);
+
+        if (userIdx === null) {
+          // Treated as unattempted (shouldn't happen via answers keys, but guard anyway)
+          if (!wrongMap.has(id)) wrongMap.set(id, { ...q, _reason: "unattempted" });
+        } else if (userIdx !== correctIdx) {
+          // Wrong — always overwrite unattempted with wrong for same question
+          wrongMap.set(id, { ...q, _reason: "wrong" });
         }
-        // Correct answers excluded from revision pool
+        // Correct → intentionally excluded
       }
     }
 
-    // Deduplicate — prefer "wrong" over "unattempted" for same question
-    const map = new Map();
-    for (const q of wrong) {
-      const ex = map.get(q.id);
-      if (!ex || (ex._reason === "unattempted" && q._reason === "wrong")) map.set(q.id, q);
-    }
+    console.log("[RevisionPool] wrong/skipped pool size:", wrongMap.size, "of", totalAnswered, "answered");
+
     return {
-      questions: [...map.values()].slice(0, maxQuestions),
-      stats: { totalWrong: map.size, attempts: results.length },
+      questions: [...wrongMap.values()].slice(0, maxQuestions),
+      stats: { totalWrong: wrongMap.size, attempts: results.length },
     };
   },
 };
