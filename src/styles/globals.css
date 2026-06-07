@@ -7718,16 +7718,18 @@ table tr:hover {
 
 /* ── Leave button in exam topbar ──────────────────────────── */
 .exam-leave-btn {
-  padding: 6px 14px;
+  padding: 8px 14px;
   border-radius: 8px;
   border: 1.5px solid var(--border-blue, #cbd5e1);
   background: transparent;
   color: var(--text-muted, #64748b);
-  font-size: 0.82rem;
+  font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
-  margin-left: 8px;
+  width: 100%;
+  text-align: center;
+  display: block;
 }
 .exam-leave-btn:hover {
   background: #fef2f2;
@@ -7860,14 +7862,14 @@ table tr:hover {
 
 .exam-submit-modal-actions {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: var(--sp-2);
   width: 100%;
   margin-top: var(--sp-2);
 }
 
 .exam-submit-modal-btn {
-  width: 100%;
+  flex: 1;
   height: 52px;
   border-radius: var(--radius);
   font-size: 0.95rem;
@@ -7880,6 +7882,12 @@ table tr:hover {
   justify-content: center;
   gap: var(--sp-2);
   letter-spacing: 0.01em;
+}
+
+.exam-submit-modal-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
 }
 
 .exam-submit-modal-btn-confirm {
