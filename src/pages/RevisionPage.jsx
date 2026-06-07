@@ -28,12 +28,19 @@ export default function RevisionPage() {
       navigate("/login");
       return;
     }
+    // Supabase auth user: uid is user.id
+    const uid = user.id || user.uid;
+    if (!uid) { setLoading(false); return; }
+
     let cancelled = false;
     setLoading(true);
-    getRevisionPool(user.id)
+    console.log("[RevisionPage] fetching for uid:", uid);
+    getRevisionPool(uid)
       .then((data) => {
+        console.log("[RevisionPage] pool result:", data);
         if (!cancelled) setPool(data);
       })
+      .catch(err => console.error("[RevisionPage] error:", err))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
