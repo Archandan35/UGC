@@ -8,7 +8,6 @@ import {
   fetchBookmarks,
   syncBookmarks,
   getCurrentUid,
-  getCurrentUidAsync,
   // Attempt-state helpers from data-layer (no raw localStorage in this hook)
   getAttemptKey,
   saveAttemptState,
@@ -16,6 +15,7 @@ import {
   clearAttemptState,
   calcProgress,
 } from "../data-layer";
+import { provider } from "../data-provider";
 
 export default function useExamEngine() {
   const { examId } = useParams();
@@ -284,7 +284,7 @@ export default function useExamEngine() {
 
     try {
       // Always use async uid resolution — sync getCurrentUid() may be null on page load
-      const uid = getCurrentUid() || await getCurrentUidAsync();
+      const uid = getCurrentUid() || await provider.getCurrentUidAsync();
       const savedId = await saveResult(resultData);
       if (savedId) resultData.id = savedId;
 
