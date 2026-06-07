@@ -3,7 +3,7 @@
  * Knows NOTHING about any database provider. Delegates everything to provider.
  */
 import { provider } from "../data-provider";
-import { getCurrentUid } from "./auth";
+import { getCurrentUid, getCurrentUidAsync } from "./auth";
 
 export const getResults             = ()                => provider.getResults();
 export const getUserResults         = (uid, max)        => provider.getUserResults(uid, max);
@@ -15,7 +15,8 @@ export const recordMockStart        = (uid)             => provider.recordMockSt
 export const FREE_MONTHLY_LIMIT     = provider.FREE_MONTHLY_LIMIT;
 
 export async function saveResult(result) {
-  const uid = getCurrentUid();
+  // Use async uid — getCurrentUid() may return null if cache not yet populated
+  const uid = getCurrentUid() || await getCurrentUidAsync();
   return provider.saveResult(result, uid);
 }
 
