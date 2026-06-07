@@ -11,6 +11,9 @@ function correctIndexOf(q) {
   if (typeof q.correctAnswer === "string") {
     return ANSWER_MAP[q.correctAnswer.trim().toUpperCase()] ?? 0;
   }
+  if (typeof q.answer === "string") {
+    return ANSWER_MAP[q.answer.trim().toUpperCase()] ?? 0;
+  }
   return 0;
 }
 
@@ -19,7 +22,6 @@ export default function RevisionPage() {
   const navigate = useNavigate();
   const [pool, setPool] = useState({ questions: [], stats: null });
   const [loading, setLoading] = useState(true);
-  const [revealed, setRevealed] = useState({});
   const [current, setCurrent] = useState(0);
 
   useEffect(() => {
@@ -28,26 +30,21 @@ export default function RevisionPage() {
       navigate("/login");
       return;
     }
-    // Supabase auth user: uid is user.id
     const uid = user.id || user.uid;
     if (!uid) { setLoading(false); return; }
 
     let cancelled = false;
     setLoading(true);
-    console.log("[RevisionPage] fetching for uid:", uid);
     getRevisionPool(uid)
       .then((data) => {
-        console.log("[RevisionPage] pool result:", data);
         if (!cancelled) setPool(data);
       })
       .catch(err => console.error("[RevisionPage] error:", err))
       .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [user, authLoading, navigate]);
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <div className="page">
         <TopNavbar />
@@ -57,87 +54,169 @@ export default function RevisionPage() {
   }
 
   const questions = pool.questions || [];
-  const q = questions[current];
+  const wrongCount = questions.filter(q => q._reason === "wrong").length;
+  const skippedCount = questions.filter(q => q._reason === "unattempted").length;
 
-  return (
-    <div className="page">
-      <TopNavbar />
-      <div className="revision-header">
-        <div>
-          <h2>Revision Mode</h2>
-          <p>Questions you got wrong or skipped — practice them till you nail them.</p>
+  if (questions.length === 0) {
+    return (
+      <div className="page">
+        <TopNavbar />
+        <div className="revision-topbar">
+          <div>
+            <h2>Revision Mode</h2>
+            <p>Questions you got wrong or skipped — practice them till you nail them.</p>
+          </div>
+          <div className="revision-topbar-stats">
+            <div className="revision-stat-chip"><span>Queue</span><strong>0</strong></div>
+            <div className="revision-stat-chip"><span>Attempts</span><strong>{pool.stats?.attempts || 0}</strong></div>
+          </div>
         </div>
-        <div className="revision-stats">
-          <div className="stat-chip"><span>Queue</span><strong>{questions.length}</strong></div>
-          <div className="stat-chip"><span>Attempts</span><strong>{pool.stats?.attempts || 0}</strong></div>
-        </div>
-      </div>
-
-      {questions.length === 0 ? (
-        <div className="empty-state">
+        <div className="revision-empty-state">
           <h3>Nothing to revise yet 🎉</h3>
           <p>Take a few mock exams and any wrong answers will show up here.</p>
           <button className="btn-primary" onClick={() => navigate("/exams")}>Browse Exams</button>
         </div>
-      ) : (
-        <div className="revision-card">
-          <div className="revision-progress-bar">
-            <div className="revision-progress-fill" data-pct={Math.round(((current + 1) / questions.length) * 100)} />
-          </div>
-          <div className="revision-question-meta">
-            <span className="badge-soft">Question {current + 1} / {questions.length}</span>
-            <span className={`badge-soft ${q._reason === "wrong" ? "badge-danger" : "badge-warning"}`}>
-              {q._reason === "wrong" ? "Previously wrong" : "Skipped"}
-            </span>
-          </div>
-          <h3 className="revision-question-text" dangerouslySetInnerHTML={{ __html: q.question || "" }} />
-          <div className="revision-options">
-            {(q.options || []).map((opt, i) => {
-              const isCorrect = i === correctIndexOf(q);
-              const show = revealed[q.id];
-              return (
-                <div
-                  key={i}
-                  className={`revision-option ${show && isCorrect ? "revision-option-correct" : ""}`}
-                >
-                  <span className="revision-option-label">{String.fromCharCode(65 + i)}</span>
-                  <span className="revision-option-text">{opt}</span>
-                </div>
-              );
-            })}
-          </div>
+      </div>
+    );
+  }
 
-          {revealed[q.id] && q.explanation && (
-            <div className="revision-explanation">
-              <h4>Explanation</h4>
-              <p>{q.explanation}</p>
+  const q = questions[current];
+  const correctIdx = correctIndexOf(q);
+
+  return (
+    <div className="page">
+      <TopNavbar />
+
+      {/* ── Top bar ── */}
+      <div className="revision-topbar">
+        <div>
+          <h2>Revision Mode</h2>
+          <p>Questions you got wrong or skipped — practice them till you nail them.</p>
+        </div>
+        <div className="revision-topbar-stats">
+          <div className="revision-stat-chip"><span>Queue</span><strong>{questions.length}</strong></div>
+          <div className="revision-stat-chip"><span>Wrong</span><strong>{wrongCount}</strong></div>
+          <div className="revision-stat-chip"><span>Skipped</span><strong>{skippedCount}</strong></div>
+          <div className="revision-stat-chip"><span>Attempts</span><strong>{pool.stats?.attempts || 0}</strong></div>
+        </div>
+      </div>
+
+      {/* ── Main layout ── */}
+      <div className="revision-layout">
+
+        {/* ── Question panel (left) ── */}
+        <div className="revision-main">
+          <div className="revision-question-card">
+
+            {/* Question header */}
+            <div className="revision-question-header">
+              <div className="revision-question-badge">Q.{current + 1}</div>
+              <div
+                className="revision-question-text"
+                dangerouslySetInnerHTML={{ __html: q.question || "" }}
+              />
             </div>
-          )}
 
-          <div className="revision-controls">
-            <button
-              className="btn-secondary"
-              disabled={current === 0}
-              onClick={() => setCurrent((c) => Math.max(0, c - 1))}
-            >
-              ← Previous
-            </button>
-            <button
-              className="btn-primary"
-              onClick={() => setRevealed((r) => ({ ...r, [q.id]: !r[q.id] }))}
-            >
-              {revealed[q.id] ? "Hide Answer" : "Reveal Answer"}
-            </button>
-            <button
-              className="btn-secondary"
-              disabled={current === questions.length - 1}
-              onClick={() => setCurrent((c) => Math.min(questions.length - 1, c + 1))}
-            >
-              Next →
-            </button>
+            {/* Reason badge */}
+            <div className="revision-reason-row">
+              <span className={`revision-reason-badge ${q._reason === "wrong" ? "revision-badge-wrong" : "revision-badge-skipped"}`}>
+                {q._reason === "wrong" ? "Previously Wrong" : "Previously Skipped"}
+              </span>
+              {q.difficulty && (
+                <span className={`revision-reason-badge revision-badge-level ${
+                  q.difficulty === "Easy" ? "level-easy"
+                  : q.difficulty === "Medium" ? "level-medium"
+                  : "level-hard"
+                }`}>
+                  {q.difficulty}
+                </span>
+              )}
+            </div>
+
+            {/* Options — always show correct answer highlighted */}
+            <div className="review-options">
+              {(q.options || []).map((opt, i) => {
+                const isCorrectOpt = i === correctIdx;
+                return (
+                  <div
+                    key={i}
+                    className={`review-option-card ${isCorrectOpt ? "review-correct revision-correct-pulse" : ""}`}
+                  >
+                    <div className="review-option-label">{String.fromCharCode(65 + i)}.</div>
+                    <div className="review-option-text">{opt}</div>
+                    {isCorrectOpt && (
+                      <div className="revision-correct-tick">✓</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Explanation */}
+            {q.explanation && (
+              <div className="review-explanation">
+                <h4>Explanation</h4>
+                <p>{q.explanation}</p>
+              </div>
+            )}
+
+            {/* Navigation */}
+            <div className="review-navigation">
+              <button
+                className="review-nav-btn"
+                disabled={current === 0}
+                onClick={() => setCurrent(c => Math.max(0, c - 1))}
+              >
+                ← Previous
+              </button>
+              <div className="review-question-count">
+                {current + 1} / {questions.length}
+              </div>
+              <button
+                className="review-nav-btn"
+                disabled={current === questions.length - 1}
+                onClick={() => setCurrent(c => Math.min(questions.length - 1, c + 1))}
+              >
+                Next →
+              </button>
+            </div>
           </div>
         </div>
-      )}
+
+        {/* ── Sidebar palette (right) ── */}
+        <div className="review-sidebar">
+          <h3>Questions</h3>
+
+          {/* Legend */}
+          <div className="review-legend">
+            <div className="review-legend-item">
+              <span className="review-legend-counter wrong">{wrongCount}</span>
+              Wrong
+            </div>
+            <div className="review-legend-item">
+              <span className="review-legend-counter not-visited">{skippedCount}</span>
+              Skipped
+            </div>
+          </div>
+
+          {/* Palette grid */}
+          <div className="review-palette">
+            {questions.map((item, index) => (
+              <button
+                key={item.id || index}
+                onClick={() => setCurrent(index)}
+                className={`review-palette-btn ${
+                  item._reason === "wrong"
+                    ? "review-palette-wrong"
+                    : "revision-palette-skipped"
+                } ${current === index ? "review-current" : ""}`}
+              >
+                {index + 1}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
