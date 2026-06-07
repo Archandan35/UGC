@@ -28,6 +28,8 @@ export default function ExamPageDesktop() {
     toggleReview,
     toggleBookmark,
     submitExam,
+    submitting,
+    submitError,
     timeLeft,
     cheatCount,
     formatTime,
@@ -107,18 +109,27 @@ export default function ExamPageDesktop() {
                 <> <span className="exam-submit-unattempted">{unattemptedCount} unattempted.</span></>
               )}
             </p>
-            <div className="exam-submit-modal-actions">
+            {submitError && (
+              <p style={{ color: "#e53e3e", fontSize: "0.85rem", marginBottom: "0.5rem" }}>
+                ⚠️ {submitError}
+              </p>
+            )}
+            <div className="exam-submit-modal-actions" style={{ flexDirection: "row", gap: "0.75rem" }}>
               <button
                 className="exam-submit-modal-btn exam-submit-modal-btn-confirm"
+                style={{ flex: 1 }}
+                disabled={submitting}
                 onClick={() => {
                   setShowSubmitModal(false);
                   submitExam(false);
                 }}
               >
-                ✅ Yes, Submit
+                {submitting ? "Submitting…" : "✅ Yes, Submit"}
               </button>
               <button
                 className="exam-submit-modal-btn exam-submit-modal-btn-cancel"
+                style={{ flex: 1 }}
+                disabled={submitting}
                 onClick={() => setShowSubmitModal(false)}
               >
                 ← Continue Exam
@@ -128,10 +139,21 @@ export default function ExamPageDesktop() {
         </div>
       )}
 
+      {/* ── Submitting overlay ── */}
+      {submitting && !showSubmitModal && (
+        <div className="exam-submit-modal-overlay">
+          <div className="exam-submit-modal">
+            <div className="exam-submit-modal-icon" style={{ fontSize: "2.5rem" }}>⏳</div>
+            <h3 className="exam-submit-modal-title">Submitting Exam…</h3>
+            <p className="exam-submit-modal-sub">Please wait while we save your result.</p>
+          </div>
+        </div>
+      )}
+
       {/* ── LEFT ── */}
       <div className="exam-main">
 
-        {/* Topbar */}
+        {/* Topbar — Leave button removed from here, now in navigator */}
         <div className="topbar">
           <div>
             <h2>{examData?.name || examData?.title || "Mock Test"}</h2>
@@ -140,13 +162,6 @@ export default function ExamPageDesktop() {
           <div className="topbar-right">
             <h2>⏳ {formatTime(timeLeft)}</h2>
             <p>Warnings: {cheatCount ?? 0}/3</p>
-            <button
-              className="exam-leave-btn"
-              onClick={() => setShowLeaveModal(true)}
-              aria-label="Leave exam"
-            >
-              ← Leave
-            </button>
           </div>
         </div>
 
@@ -208,6 +223,7 @@ export default function ExamPageDesktop() {
             <button
               className="submit-btn"
               onClick={() => setShowSubmitModal(true)}
+              disabled={submitting}
             >
               Submit
             </button>
@@ -279,6 +295,16 @@ export default function ExamPageDesktop() {
             );
           })}
         </div>
+
+        {/* Leave button relocated here — inside navigator panel */}
+        <button
+          className="exam-leave-btn"
+          style={{ marginTop: "1rem", width: "100%" }}
+          onClick={() => setShowLeaveModal(true)}
+          aria-label="Leave exam"
+        >
+          ← Leave Exam
+        </button>
 
       </div>
     </div>
