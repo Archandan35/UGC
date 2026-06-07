@@ -16,6 +16,7 @@ export const setDisplayName                 = (name)       => provider.setDispla
 export const subscribeAuthState             = (cb)         => provider.subscribeAuthState(cb);
 export const getCurrentUser                 = ()           => provider.getCurrentUser();
 export const getCurrentUid                  = ()           => provider.getCurrentUid();
+export const getCurrentUidAsync             = ()           => provider.getCurrentUidAsync();
 export const getAuth                        = ()           => provider.getAuth();
 export const getSecondaryAuth               = ()           => provider.getSecondaryAuth();
 export const updatePassword                 = (user, pw)   => provider.updatePassword(user, pw);
