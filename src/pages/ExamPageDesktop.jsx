@@ -1,12 +1,14 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import useExamEngine from "../hooks/useExamEngine";
 import LeaveExamModal from "../components/exam/LeaveExamModal";
 
 /**
  * ExamPageDesktop — desktop exam layout.
- * Uses useExamEngine hook. Adds Leave-exam confirmation modal (Issue 3).
+ * Uses useExamEngine hook. Adds Leave-exam confirmation modal and Submit confirmation modal.
  */
 export default function ExamPageDesktop() {
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
+
   const {
     loading,
     questions,
@@ -30,7 +32,6 @@ export default function ExamPageDesktop() {
     cheatCount,
     formatTime,
     setVisited,
-    // Leave modal controls from hook
     showLeaveModal,
     setShowLeaveModal,
     handleSaveAndLeave,
@@ -80,15 +81,52 @@ export default function ExamPageDesktop() {
     currentQ.options ||
     [currentQ.optionA, currentQ.optionB, currentQ.optionC, currentQ.optionD].filter(Boolean);
 
+  const answeredCount    = Object.keys(answers).length;
+  const unattemptedCount = questions.length - answeredCount;
+
   return (
     <div className="exam-layout">
 
-      {/* ── Leave Exam Confirmation Modal (Issue 3) ── */}
+      {/* ── Leave Exam Confirmation Modal ── */}
       <LeaveExamModal
         show={showLeaveModal}
         onContinue={() => setShowLeaveModal(false)}
         onLeave={handleSaveAndLeave}
       />
+
+      {/* ── Submit Confirmation Modal ── */}
+      {showSubmitModal && (
+        <div className="exam-submit-modal-overlay">
+          <div className="exam-submit-modal">
+            <div className="exam-submit-modal-icon">📋</div>
+            <h3 className="exam-submit-modal-title">Submit Exam?</h3>
+            <p className="exam-submit-modal-sub">
+              You have answered <strong>{answeredCount}</strong> of{" "}
+              <strong>{questions.length}</strong> questions.
+              {unattemptedCount > 0 && (
+                <> <span className="exam-submit-unattempted">{unattemptedCount} unattempted.</span></>
+              )}
+            </p>
+            <div className="exam-submit-modal-actions">
+              <button
+                className="exam-submit-modal-btn exam-submit-modal-btn-confirm"
+                onClick={() => {
+                  setShowSubmitModal(false);
+                  submitExam(false);
+                }}
+              >
+                ✅ Yes, Submit
+              </button>
+              <button
+                className="exam-submit-modal-btn exam-submit-modal-btn-cancel"
+                onClick={() => setShowSubmitModal(false)}
+              >
+                ← Continue Exam
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── LEFT ── */}
       <div className="exam-main">
@@ -102,7 +140,6 @@ export default function ExamPageDesktop() {
           <div className="topbar-right">
             <h2>⏳ {formatTime(timeLeft)}</h2>
             <p>Warnings: {cheatCount ?? 0}/3</p>
-            {/* Leave button — triggers save+leave modal */}
             <button
               className="exam-leave-btn"
               onClick={() => setShowLeaveModal(true)}
@@ -116,7 +153,6 @@ export default function ExamPageDesktop() {
         {/* Question card */}
         <div className="question-card">
 
-          {/* Number badge + question text */}
           <div className="question-header-row">
             <div className="question-number-box">
               Q.{currentQuestion + 1}
@@ -171,10 +207,7 @@ export default function ExamPageDesktop() {
             </button>
             <button
               className="submit-btn"
-              disabled={false}
-              onClick={() => {
-                if (window.confirm("Submit the exam now?")) submitExam(false);
-              }}
+              onClick={() => setShowSubmitModal(true)}
             >
               Submit
             </button>
