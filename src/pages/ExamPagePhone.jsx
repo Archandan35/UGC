@@ -27,6 +27,8 @@ export default function ExamPagePhone() {
     toggleReview,
     toggleBookmark,
     submitExam,
+    submitting,
+    submitError,
     timeLeft,
     cheatCount,
     formatTime,
@@ -161,15 +163,19 @@ export default function ExamPagePhone() {
                 <> <span className="exam-submit-unattempted">{unattemptedCount} unattempted.</span></>
               )}
             </p>
-            <div className="exam-submit-modal-actions">
+            <div className="exam-submit-modal-actions" style={{ flexDirection: "row", gap: "0.75rem" }}>
               <button
                 className="exam-submit-modal-btn exam-submit-modal-btn-confirm"
+                style={{ flex: 1 }}
+                disabled={submitting}
                 onClick={handleSubmitConfirm}
               >
-                ✅ Yes, Submit
+                {submitting ? "Submitting…" : "✅ Yes, Submit"}
               </button>
               <button
                 className="exam-submit-modal-btn exam-submit-modal-btn-cancel"
+                style={{ flex: 1 }}
+                disabled={submitting}
                 onClick={() => setShowSubmitDialog(false)}
               >
                 ← Continue Exam
