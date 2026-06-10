@@ -64,6 +64,7 @@ export default function App() {
           <Route path="/login"    element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/pricing"  element={<PricingPage />} />
+          <Route path="/premium" element={<PremiumPage />} />
 
           {/* DASHBOARD (auto role routing) */}
           <Route
