@@ -14,7 +14,7 @@ import ResultPage         from "./pages/ResultPage";
 import Leaderboard        from "./pages/Leaderboard";
 import PricingPage        from "./pages/PricingPage";
 import DatabaseManagement from "./admin/DatabaseManagement";
-import premiumPage         from "./pages/premium";
+import PremiumPage from "./pages/premium";
 
 import { useRole, isAdminRole } from "./hooks/useRole";
 
@@ -107,6 +107,7 @@ export default function App() {
           <Route path="/admin/audit-log"         element={<AdminRoute><AuditLogPage /></AdminRoute>} />
           <Route path="/admin/database"          element={<AdminRoute><DatabaseManagement /></AdminRoute>} />
           <Route path="/pages/premium"          element={<AdminRoute><premium/></AdminRoute>} />
+          <Route path="/premium" element={<PremiumPage />} />
 
           {/* FALLBACK */}
           <Route path="*" element={<Navigate to="/" replace />} />
