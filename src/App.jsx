@@ -107,8 +107,8 @@ export default function App() {
           <Route path="/admin/analytics"         element={<AdminRoute><AnalyticsPage /></AdminRoute>} />
           <Route path="/admin/audit-log"         element={<AdminRoute><AuditLogPage /></AdminRoute>} />
           <Route path="/admin/database"          element={<AdminRoute><DatabaseManagement /></AdminRoute>} />
-          <Route path="/pages/premium"          element={<AdminRoute><premium/></AdminRoute>} />
-          <Route path="/premium" element={<PremiumPage />} />
+         
+        
 
           {/* FALLBACK */}
           <Route path="*" element={<Navigate to="/" replace />} />
