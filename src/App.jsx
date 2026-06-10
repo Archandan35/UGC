@@ -14,6 +14,7 @@ import ResultPage         from "./pages/ResultPage";
 import Leaderboard        from "./pages/Leaderboard";
 import PricingPage        from "./pages/PricingPage";
 import DatabaseManagement from "./admin/DatabaseManagement";
+import premiumPage         from "./pages/premium";
 
 import { useRole, isAdminRole } from "./hooks/useRole";
 
