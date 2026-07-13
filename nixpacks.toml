@@ -1,0 +1,15 @@
+# Railway build/run config.
+# We start the Express server (server.js) — NOT `vite preview` — because the
+# same process serves the built SPA (dist/) AND the Razorpay order/verify/webhook
+# + Gemini OCR API routes. Using preview would disable payments in production.
+[phases.setup]
+nixPkgs = ["nodejs_20"]
+
+[phases.install]
+cmds = ["npm install"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "node server.js"

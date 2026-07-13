@@ -1,0 +1,1 @@
+import{ao as a,S as u}from"./index-BoFT11kD.js";const s=t=>a.listStudyPlans(t);async function r(t){const n=u();return a.createStudyPlan(n,t)}async function c(t,n){const e=u();return a.updateStudyPlan(e,t,n)}async function l(t){const n=u();return a.deleteStudyPlan(n,t)}export{r as c,l as d,s as l,c as u};

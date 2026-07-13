@@ -1,0 +1,1 @@
+import{ao as t,U as r}from"./index-BoFT11kD.js";const o=e=>t.listThreads(e),c=e=>t.getThread(e),i=(e,s)=>t.listReplies(e,s);async function p(e){const s=r();return t.createThread(e,s)}async function l(e,s){const a=r();return t.postReply(e,s,a)}export{o as a,p as c,c as g,i as l,l as p};
