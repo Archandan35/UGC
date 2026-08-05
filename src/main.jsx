@@ -6,6 +6,9 @@ import { Toaster } from "react-hot-toast";
 
 import { AuthProvider } from "./context/AuthContext";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { keepAliveService } from "./services/keepAliveService";
+
+keepAliveService.start();
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
